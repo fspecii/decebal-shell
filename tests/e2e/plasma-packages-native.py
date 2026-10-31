@@ -1,0 +1,532 @@
+#!/usr/bin/env python3
+"""Native acceptance of the Plasma Breeze package (the taskbar renderer) against the branding contract, on ONE private Xvfb at a time.
+
+  python3 tests/e2e/plasma-packages-native.py --bin-dir DIR --repo DIR --rdwm FILE --rdwmctl FILE --out NEW_DIR
+        [--packages plasma-breeze] [--edges bottom,top,left,right] [--scales 1,1.25,2] [--modes dark,light] [--cases glyph,applets,launcher,popup,keyboard]
+
+Everything runs with an environment built from nothing (no host DISPLAY, WAYLAND_DISPLAY, XAUTHORITY, session or bus variable): a private HOME / XDG,
+a private dbus-daemon, `tests/e2e/private_x11.py` (a reserved high display number, both listening transports verified to belong to the exact Xvfb child
+before any client or input), the pinned window manager and rdwmctl given by --rdwm / --rdwmctl (their sha256 are recorded), the debug binaries of
+--bin-dir (recorded too) and a private XRender compositor. Nothing outside the output directory is written and only the processes of this run are stopped.
+
+Per package x edge x scale x mode it proves, with real pointer and keyboard input and the real window manager:
+* strut == the work area rdwm reports, and a fake client window lies inside it;
+* glyph:    the Start button shows Kickoff's icon (`start-here-kde-symbolic`), which differs from the neutral grid, the Windows squares and the
+            Apple glyph (control packages are rendered the same way), and no search box is drawn for Breeze;
+* applets:  every registry applet toggled alone, then all on and all off through `decthemectl panel applet` (the user's real switch): the effective set
+            reported by `decthemectl panel --json` and, for the applets this system can supply, the zones the dock reports follow it;
+* launcher: a click on Start opens Kickoff (`declaunch`, style kde) on the desktop side of the panel, inside the output, clear of the strip, centred on
+            the Start button along the panel as far as the screen allows; a second click closes it;
+* popup:    the clock's popup opens on the desktop side of the strip and inside the output, and Escape closes it;
+* keyboard: `decdock --focus` draws a ring that moves with the arrow keys, Enter on Start opens Kickoff and Escape leaves keyboard mode.
+The first failure of a case is recorded with a screenshot and the run goes on; the exit status is 1 when any case failed.
+"""
+import argparse
+import hashlib
+import itertools
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+from PIL import Image, ImageChops
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import private_x11  # noqa: E402
+
+W, H = 1920, 1080
+THICKNESS, GAP = 44, 8  # the declared [taskbar] numbers of plasma-breeze, px at scale 1
+REGISTRY = ["launcher", "app_menu", "workspaces", "window_title", "tasks", "layout", "media", "clock", "weather", "tray", "clipboard", "cpu", "memory",
+            "notifications", "stay_awake", "agents", "lock_keys", "volume", "network", "bluetooth", "battery", "brightness", "search", "dashboard",
+            "control_center", "power", "show_desktop"]
+# applets whose zone the dock reports by name in DECDOCK_DEBUG_LAYOUT, and the line that shows it
+ZONES = {"launcher": "start", "tasks": "task", "clock": "clock", "show_desktop": "desktop", "workspaces": "pagercell"}
+
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def wait(predicate, label, tries=150, delay=0.1):
+    last = None
+    for _ in range(tries):
+        try:
+            value = predicate()
+            if value:
+                return value
+        except (OSError, ValueError, subprocess.CalledProcessError, IndexError, KeyError) as e:
+            last = e
+        time.sleep(delay)
+    raise AssertionError(f"{label}{f' ({last})' if last else ''}")
+
+
+def luminance(px):
+    def lin(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * lin(px[0]) + 0.7152 * lin(px[1]) + 0.0722 * lin(px[2])
+
+
+def contrast(a, b):
+    la, lb = sorted((luminance(a), luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def ink_distance(a, b):
+    return sum(max(abs(p - q) for p, q in zip(pa, pb)) for pa, pb in zip(a.get_flattened_data(), b.get_flattened_data()))
+
+
+WORLD = itertools.count(1)
+
+
+class Case:
+    """One private world: Xvfb, bus, compositor, window manager, the dock of a package."""
+
+    def __init__(self, args, package, edge, scale, mode, tag, themes_dir=None):
+        self.args, self.package, self.edge, self.scale, self.mode, self.tag = args, package, edge, scale, mode, tag
+        self.horizontal = edge in ("bottom", "top")
+        self.t, self.g = round(THICKNESS * scale), round(GAP * scale)
+        self.procs = []
+        self.themes = themes_dir or Path(args.repo) / "themes"
+        self.root = Path(args.worlds) / f"w{next(WORLD)}"  # short on purpose: unix socket paths are limited to 108 bytes
+        self.root.mkdir(mode=0o700)
+        r = self.root
+        for sub in ("home", "config", "cache", "state", "data", "run", "bin", "empty"):
+            (r / sub).mkdir(mode=0o700)
+        for app in ("curl", "nmcli", "pactl", "wpctl", "playerctl", "bluetoothctl", "brightnessctl"):
+            (r / "bin" / app).write_text("#!/bin/sh\nexit 1\n")
+            (r / "bin" / app).chmod(0o755)
+        self.debug = r / "layout.txt"
+        (r / "rdwm.toml").write_text("[general]\nborder_px = 0\n[bar]\nshow = false\n[decoration]\nenabled = false\n")
+        self.env = dict(
+            HOME=str(r / "home"), XDG_CONFIG_HOME=str(r / "config"), XDG_CACHE_HOME=str(r / "cache"), XDG_STATE_HOME=str(r / "state"),
+            XDG_DATA_HOME=str(r / "data"), XDG_RUNTIME_DIR=str(r / "run"), DECEBAL_CONFIG=str(r / "config"), DECEBAL_THEMES=str(self.themes),
+            DECEBAL_SYSTEM_THEMES=str(r / "empty"), DECEBAL_BACKEND="x11", DECEBAL_SYSTEM_AUTOMATIC="0", DECEBAL_SCALE=str(scale),
+            DECDOCK_DEBUG_LAYOUT=str(self.debug), RDWMCTL=str(args.rdwmctl), RDWM_SOCK=str(r / "run/rdwm.sock"), RDWM_CONFIG=str(r / "rdwm.toml"),
+            PATH=f"{r / 'bin'}:{args.bin_dir}:/usr/bin:/bin", LANG="C.UTF-8",
+        )
+        self.log = (Path(args.out) / f"{tag}.log").open("w")
+        self.steps = []
+
+    # ------------------------------------------------------------------ plumbing
+    def run(self, *argv, timeout=30, check=True):
+        assert self.env.get("DISPLAY", "").startswith(":") and int(self.env["DISPLAY"][1:]) >= 700, "refusing a client call before the private server was verified"
+        return subprocess.run([str(a) for a in argv], env=self.env, text=True, capture_output=True, check=check, timeout=timeout).stdout.strip()
+
+    def spawn(self, *argv):
+        assert "DISPLAY" in self.env
+        p = subprocess.Popen([str(a) for a in argv], env=self.env, stdout=self.log, stderr=self.log, start_new_session=True)
+        self.procs.append(p)
+        return p
+
+    def bin(self, name):
+        return Path(self.args.bin_dir) / name
+
+    def step(self, name, **data):
+        self.steps.append({"step": name, **data})
+
+    def start(self):
+        self.x, display = private_x11.start_private_xvfb(env=dict(self.env), log=self.log, screen=f"{W}x{H}x24", executable="Xvfb")
+        self.env["DISPLAY"] = display
+        self.display = display
+        bus = subprocess.Popen(["dbus-daemon", "--session", "--nofork", "--nopidfile", "--print-address=1"], env=self.env, stdout=subprocess.PIPE, stderr=self.log, start_new_session=True, text=True)
+        self.procs.append(bus)
+        self.env["DBUS_SESSION_BUS_ADDRESS"] = bus.stdout.readline().strip()
+        self.env["DBUS_SYSTEM_BUS_ADDRESS"] = "unix:path=" + str(self.root / "no-system-bus")
+        wait(lambda: self.run("xdotool", "getdisplaygeometry"), "private Xvfb answers")
+        (self.root / "picom.conf").write_text('backend = "xrender";\nvsync = false;\nuse-damage = false;\nshadow = false;\nfading = false;\n')
+        self.spawn("picom", "--config", self.root / "picom.conf")
+        time.sleep(0.8)
+        self.spawn(self.args.rdwm, "--backend", "x11", "--config", self.root / "rdwm.toml")
+        wait(lambda: (self.root / "run/rdwm.sock").exists() and json.loads(self.run(self.args.rdwmctl, "state"))["ok"], "private pinned rdwm up")
+        self.sweep_needle = f"XDG_RUNTIME_DIR={self.root}/run".encode()
+
+    def stop(self):
+        # everything started with this world's runtime directory (`theme apply` spawns the dock detached), then our own children
+        for proc in Path("/proc").iterdir():
+            if proc.name.isdigit() and int(proc.name) != os.getpid():
+                try:
+                    if getattr(self, "sweep_needle", None) in (proc / "environ").read_bytes().split(b"\0"):
+                        os.kill(int(proc.name), 15)
+                except (OSError, ValueError):
+                    pass
+        for p in reversed(self.procs):
+            p.terminate()
+        for p in self.procs:
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        if getattr(self, "x", None):
+            private_x11.close(self.x)
+        self.log.close()
+
+    def shot(self, name, crop=None):
+        path = Path(self.args.out) / f"{self.tag}-{name}.png"
+        self.run("import", "-window", "root", path)
+        im = Image.open(path).convert("RGB")
+        return im.crop(crop) if crop else im
+
+    def apply(self):
+        (self.root / "config/dock-settings.json").write_text(json.dumps({"edge": self.edge}))
+        self.run(self.bin("decthemectl"), "theme", "apply", self.package, "--no-rdwm")
+        cfg = json.loads((self.root / "config/decebal.json").read_text())
+        cfg["theme"]["mode"] = self.mode
+        (self.root / "config/decebal.json").write_text(json.dumps(cfg))
+
+    def dump(self):
+        rows = {}
+        for _ in range(60):
+            try:
+                text = self.debug.read_text()
+            except FileNotFoundError:
+                text = ""
+            if text.strip():
+                for line in text.splitlines():
+                    parts = line.split()
+                    rows.setdefault(parts[0], []).append(parts[1:])
+                return rows
+            time.sleep(0.1)
+        raise AssertionError("the dock's layout dump never appeared")
+
+    def surface(self):
+        win = self.dock_window()
+        out = self.run("xdotool", "getwindowgeometry", "--shell", win)
+        v = dict(line.split("=") for line in out.splitlines() if "=" in line)
+        return {k: int(x) for k, x in v.items() if k in ("X", "Y", "WIDTH", "HEIGHT")}
+
+    def dock_window(self):
+        return wait(lambda: self.run("xdotool", "search", "--name", "decebal-dock", check=False).splitlines()[0], "dock window")
+
+    def at(self, kind, index=0):
+        """Screen position of a dumped zone's centre (the dump's coordinates are surface coordinates: x across / along the strip as drawn)."""
+        s, rows = self.surface(), self.dump()
+        row = rows[kind][index]
+        if kind == "pagercell":
+            start = rows["start"][0]
+            along = float(row[1])
+            return (round(s["X"] + along), round(s["Y"] + float(start[1]))) if self.horizontal else (round(s["X"] + float(start[0])), round(s["Y"] + along))
+        a, b = (float(row[1]), float(row[2])) if kind == "task" else (float(row[0]), float(row[1]))
+        return round(s["X"] + a), round(s["Y"] + b)
+
+    def click(self, x, y):
+        self.run("xdotool", "mousemove", x, y)
+        time.sleep(0.15)
+        self.run("xdotool", "click", "1")
+        time.sleep(0.6)
+
+    def park(self):
+        s = self.surface()
+        sx, sy = (float(v) for v in self.dump()["start"][0])
+        self.run("xdotool", "mousemove", round(s["X"] + 1100) if self.horizontal else round(s["X"] + sx), round(s["Y"] + sy) if self.horizontal else round(s["Y"] + 1100))
+
+    def windows(self):
+        return set(self.run("xdotool", "search", "--onlyvisible", "--name", ".", check=False).split())
+
+    def geometry(self, win):
+        out = self.run("xdotool", "getwindowgeometry", "--shell", win)
+        v = dict(line.split("=") for line in out.splitlines() if "=" in line)
+        return int(v["X"]), int(v["Y"]), int(v["WIDTH"]), int(v["HEIGHT"])
+
+    def strip_box(self):
+        t, g = self.t, self.g
+        return {"bottom": (g, H - g - t, W - g, H - g), "top": (g, g, W - g, g + t), "left": (g, g, g + t, H - g), "right": (W - g - t, g, W - g, H - g)}[self.edge]
+
+    def desktop_side_ok(self, rect, what):
+        """`rect` (x, y, w, h) lies inside the output and entirely on the desktop side of the strip."""
+        x, y, w, h = rect
+        sx0, sy0, sx1, sy1 = self.strip_box()
+        assert x >= -1 and y >= -1 and x + w <= W + 1 and y + h <= H + 1, f"{what} {rect} leaves the output"
+        ok = {"bottom": y + h <= sy0 + 1, "top": y >= sy1 - 1, "left": x >= sx1 - 1, "right": x + w <= sx0 + 1}[self.edge]
+        assert ok, f"{what} {rect} is not on the desktop side of the strip {self.strip_box()} ({self.edge})"
+
+
+# ---------------------------------------------------------------------------------------------------------------------- cases
+def case_glyph(c, control_shot):
+    """The Start glyph is Kickoff's icon, not a neutral grid / Windows / Apple mark; Breeze draws no search box."""
+    c.park()
+    time.sleep(0.5)
+    shot = c.shot("start")
+    x, y = c.at("start")
+    half = round(14 * c.scale)
+    box = (x - half, y - half, x + half, y + half)
+    glyph = shot.crop(box)
+    ink = sum(1 for px in glyph.get_flattened_data() if max(px) - min(px) > 60 or luminance(px) > 0.6 or luminance(px) < 0.02)
+    assert ink > 20 * c.scale, f"{c.tag}: the Start cell shows no glyph"
+    c.step("glyph", box=box, ink_px=ink)
+    if control_shot is not None:
+        for name, other in control_shot.items():
+            d = ink_distance(glyph, other.crop(box))
+            assert d > 400 * c.scale, f"{c.tag}: the Start glyph equals the {name} control (distance {d})"
+            c.step("glyph_vs_" + name, distance=d)
+    assert "search" not in c.dump(), f"{c.tag}: Breeze draws a search zone"
+    c.step("no_search_zone")
+
+
+def panel_json(c):
+    return json.loads(c.run(c.bin("decthemectl"), "panel", "--json"))
+
+
+def effective(c):
+    """{applet key: on?} from `decthemectl panel --json`, whatever shape the listing has."""
+    data = panel_json(c)
+    found = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            key = node.get("key") or node.get("id") or node.get("name")
+            if key in REGISTRY and any(k in node for k in ("on", "enabled", "shown", "active")):
+                found[key] = bool(node.get("on", node.get("enabled", node.get("shown", node.get("active")))))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(data)
+    if not found and isinstance(data.get("applets"), dict):
+        found = {k: bool(v if not isinstance(v, dict) else v.get("on", v.get("enabled"))) for k, v in data["applets"].items() if k in REGISTRY}
+    return found
+
+
+def case_applets(c):
+    """Every registry applet alone, all on, all off: through the user's own switch, read back from the CLI and from the dock's zones."""
+    results = {}
+    baseline = effective(c)
+    assert set(REGISTRY) <= set(baseline) | {"app_menu"}, f"{c.tag}: the panel listing lacks applets {sorted(set(REGISTRY) - set(baseline))}"
+    for key in REGISTRY:
+        c.run(c.bin("decthemectl"), "panel", "applet", key, "off")
+    wait(lambda: not any(effective(c).values()), f"{c.tag}: all applets off")
+    time.sleep(0.8)
+    off = c.dump()
+    for key, line in ZONES.items():
+        assert line not in off or key not in ("tasks", "workspaces"), f"{c.tag}: {key} still draws with everything off"
+    c.shot("all-off")
+    results["all_off"] = sorted(off)
+    for key in ("launcher", "tasks", "clock", "show_desktop", "workspaces", "search"):
+        c.run(c.bin("decthemectl"), "panel", "applet", key, "on")
+        wait(lambda: effective(c).get(key) and sum(effective(c).values()) == 1, f"{c.tag}: {key} alone")
+        time.sleep(0.8)
+        rows = c.dump()
+        shown = [z for z, line in ZONES.items() if line in rows]
+        results[key + "_alone"] = shown
+        if key in ZONES:
+            assert ZONES[key] in rows, f"{c.tag}: {key} on but its zone {ZONES[key]} is not drawn: {sorted(rows)}"
+            assert [z for z in ZONES if z != key and ZONES[z] in rows and ZONES[z] != ZONES[key]] == [], f"{c.tag}: {key} alone also draws {shown}"
+        c.run(c.bin("decthemectl"), "panel", "applet", key, "off")
+        wait(lambda: not any(effective(c).values()), f"{c.tag}: {key} off again")
+    for key in REGISTRY:
+        c.run(c.bin("decthemectl"), "panel", "applet", key, "on")
+    wait(lambda: all(effective(c).get(k, True) for k in REGISTRY), f"{c.tag}: all on")
+    time.sleep(0.8)
+    results["all_on"] = sorted(c.dump())
+    c.shot("all-on")
+    c.run(c.bin("decthemectl"), "panel", "applet", "launcher", "theme")
+    c.run(c.bin("decthemectl"), "panel", "reset")
+    c.step("applets", **results)
+
+
+def card_box(c, base, open_shot):
+    """The card Kickoff draws: its window is a transparent full-output overlay (the strip is left clear), so the card is where the screen changed
+    outside the strip."""
+    mask = ImageChops.difference(base, open_shot).convert("L").point(lambda v: 255 if v > 10 else 0)
+    x0, y0, x1, y1 = c.strip_box()
+    mask.paste(0, (x0 - 1, y0 - 1, x1 + 1, y1 + 1))
+    return mask.getbbox()
+
+
+def case_launcher(c):
+    """A click on Start opens Kickoff towards the desktop (an anchored popup beside the panel); a second click closes it."""
+    c.park()
+    time.sleep(0.6)
+    base = c.shot("kickoff-before")
+    before = c.windows()
+    c.click(*c.at("start"))
+    new = wait(lambda: c.windows() - before, f"{c.tag}: Kickoff did not open", tries=100)
+    time.sleep(1.0)
+    opened = c.shot("kickoff")
+    box = card_box(c, base, opened)
+    if not box:
+        c.click(*c.at("start"))
+    assert box, f"{c.tag}: Kickoff drew nothing outside the strip"
+    rect = (box[0], box[1], box[2] - box[0], box[3] - box[1])
+    try:
+        c.desktop_side_ok(rect, "Kickoff card")
+    except AssertionError:
+        c.click(*c.at("start"))
+        raise
+    # the style's gap to the panel is 4 logical px (docs/launcher-styles.md); allow the shadow / antialiasing
+    sx0, sy0, sx1, sy1 = c.strip_box()
+    gap = {"bottom": sy0 - box[3], "top": box[1] - sy1, "left": box[0] - sx1, "right": sx0 - box[2]}[c.edge]
+    near = 0 <= gap <= round(24 * c.scale)
+    sx, sy = c.at("start")
+    along = ((box[0] + box[2]) / 2 - sx) if c.horizontal else ((box[1] + box[3]) / 2 - sy)
+    clamped = (box[0] <= round(12 * c.scale)) if c.horizontal else (box[1] <= round(12 * c.scale))
+    anchored = near and (clamped or abs(along) <= 3)
+    # The taskbar's Start currently runs `declaunch` without `--edge/--anchor/--thickness` (dock_app/windows.rs, `Hit::Start`), so Kickoff opens in its
+    # natural place (centred along the panel, against the strip) instead of hanging from the button. That is recorded as a measured gap; with
+    # --require-anchor it is a failure.
+    c.click(*c.at("start"))
+    wait(lambda: not (c.windows() & new), f"{c.tag}: a second click did not close Kickoff")
+    c.park()
+    c.step("launcher", card=rect, gap=gap, near_the_panel=near, centre_offset_along=round(along, 1), anchored_on_start=anchored, clamped_to_margin=clamped)
+    assert anchored or not c.args.require_anchor, f"{c.tag}: Kickoff is not anchored on Start (gap {gap}px from the strip, offset {along:.0f}px along it)"
+
+
+def case_popup(c):
+    c.park()
+    cx, cy = c.at("clock")
+    c.click(cx, cy)
+    popup = wait(lambda: c.dump().get("popup"), f"{c.tag}: the clock popup did not open")
+    px, py, pw, ph = (float(v) for v in popup[0])
+    s = c.surface()
+    c.desktop_side_ok((s["X"] + px, s["Y"] + py, pw, ph), "clock popup")
+    c.shot("popup")
+    c.run("xdotool", "key", "Escape")
+    wait(lambda: not c.dump().get("popup"), f"{c.tag}: Escape did not close the popup")
+    c.step("popup", rect=[px, py, pw, ph])
+
+
+def case_keyboard(c):
+    """`decdock --focus`: a ring on Start that moves with the arrows, Enter opens Kickoff, Escape leaves."""
+    c.park()
+    time.sleep(0.5)
+    base = c.shot("kb-base")
+    c.spawn(c.bin("decdock"), "--focus")
+    time.sleep(1.0)
+    ringed = c.shot("kb-ring")
+    box = base.getbbox()
+    assert ink_distance(ringed, base) > 200, f"{c.tag}: --focus drew no ring"
+    key = "Down" if not c.horizontal else "Right"
+    c.run("xdotool", "key", key)
+    time.sleep(0.6)
+    moved = c.shot("kb-moved")
+    assert ink_distance(moved, ringed) > 100, f"{c.tag}: the ring did not move with the arrow key"
+    c.run("xdotool", "key", "Escape")
+    time.sleep(0.8)
+    left = c.shot("kb-left")
+    assert ink_distance(left, base) < ink_distance(ringed, base) * 0.2, f"{c.tag}: Escape did not leave keyboard mode"
+    c.step("keyboard", ring=ink_distance(ringed, base), moved=ink_distance(moved, ringed))
+
+
+CASES = {"glyph": case_glyph, "applets": case_applets, "launcher": case_launcher, "popup": case_popup, "keyboard": case_keyboard}
+
+
+def control_copy(args, package, logo, out_root):
+    """A fresh copy of the package whose logo is replaced by `logo`: the control a real glyph must differ from."""
+    d = Path(out_root)
+    shutil.copytree(Path(args.repo) / "themes" / package, d / package)
+    text = (d / package / "theme.toml").read_text()
+    new = text.replace('logo = "icon:start-here-kde-symbolic"', f'logo = "{logo}"')
+    assert new != text
+    (d / package / "theme.toml").write_text(new)
+    return d
+
+
+def run_case(args, package, edge, scale, mode, cases, controls, report):
+    tag = f"{package}-{mode}-{edge}-{int(scale * 100)}"
+    c = Case(args, package, edge, scale, mode, tag)
+    entry = {"package": package, "edge": edge, "scale": scale, "mode": mode, "cases": {}}
+    try:
+        c.start()
+        c.apply()
+        c.dock_window()
+        wait(lambda: c.dump()["start"], f"{tag}: the dock painted")
+        time.sleep(1.0)
+        # the strut is the work area, and a client window lies inside it
+        strut = wait(lambda: [int(v) for v in c.run("xprop", "-id", c.dock_window(), "_NET_WM_STRUT_PARTIAL").split("=")[-1].replace(" ", "").split(",") if v.lstrip("-").isdigit()][:4], "strut")
+        side = {"left": 0, "right": 1, "top": 2, "bottom": 3}[edge]
+        reserve = strut[side]
+        assert reserve in (c.t + c.g, round((THICKNESS + GAP) * scale)), f"{tag}: strut {strut}"
+        expect = {"bottom": (0, 0, W, H - reserve), "top": (0, reserve, W, H - reserve), "left": (reserve, 0, W - reserve, H), "right": (0, 0, W - reserve, H)}[edge]
+        area = json.loads(c.run(args.rdwmctl, "state"))["state"]["monitors"][0]["workarea"]
+        assert (area["x"], area["y"], area["w"], area["h"]) == expect, f"{tag}: work area {area} vs strut {expect}"
+        entry["strut"], entry["work_area"] = strut, list(expect)
+        for name in cases:
+            try:
+                fn = CASES[name]
+                fn(c, controls.get((package, mode, edge, scale))) if name == "glyph" else fn(c)
+                entry["cases"][name] = "ok"
+            except AssertionError as e:
+                entry["cases"][name] = f"FAIL: {e}"
+                try:
+                    c.shot(f"fail-{name}")
+                except Exception:
+                    pass
+        entry["steps"] = c.steps
+    except BaseException as e:  # a world that did not come up is a failure of this entry, not of the run
+        entry["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        c.stop()
+        report.append(entry)
+    bad = {k: v for k, v in entry["cases"].items() if v != "ok"}
+    print(("ok  " if not bad and "error" not in entry else "FAIL") + f" {tag} {bad or entry.get('error', '')}", flush=True)
+    return not bad and "error" not in entry
+
+
+def capture_controls(args, package, edge, scale, mode, report):
+    """Start-button crops of the same panel with the logo replaced by builtin:grid / builtin:windows / builtin:apple."""
+    shots = {}
+    for logo in ("grid", "windows", "apple"):
+        themes = control_copy(args, package, f"builtin:{logo}", Path(args.worlds) / f"ctl{next(WORLD)}")
+        c = Case(args, package, edge, scale, mode, f"{package}-{mode}-{edge}-{int(scale * 100)}-control-{logo}", themes_dir=themes)
+        try:
+            c.start()
+            c.apply()
+            wait(lambda: c.dump()["start"], "control dock painted")
+            c.park()
+            time.sleep(1.2)
+            shots[logo] = c.shot("start")
+        finally:
+            c.stop()
+    return shots
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--bin-dir", required=True)
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--rdwm", required=True)
+    ap.add_argument("--rdwmctl", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--packages", default="plasma-breeze")
+    ap.add_argument("--edges", default="bottom,top,left,right")
+    ap.add_argument("--scales", default="1,1.25,2")
+    ap.add_argument("--modes", default="dark,light")
+    ap.add_argument("--require-anchor", action="store_true", help="fail when Kickoff is not anchored on the Start button")
+    ap.add_argument("--cases", default="glyph,applets,launcher,popup,keyboard")
+    args = ap.parse_args()
+    out = Path(args.out)
+    out.mkdir(parents=True)  # a fresh directory only
+    args.worlds = Path(tempfile.mkdtemp(prefix="plpk-", dir="/var/tmp"))  # short, private, kept (nothing is deleted by path)
+    cases = args.cases.split(",")
+    report, failures = [], 0
+    for package in args.packages.split(","):
+        for mode in args.modes.split(","):
+            for edge in args.edges.split(","):
+                for scale in (float(v) for v in args.scales.split(",")):
+                    controls = {}
+                    if "glyph" in cases:
+                        controls[(package, mode, edge, scale)] = capture_controls(args, package, edge, scale, mode, report)
+                    if not run_case(args, package, edge, scale, mode, cases, controls, report):
+                        failures += 1
+    repo = Path(args.repo)
+    manifest = {
+        "source_head": subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True, capture_output=True).stdout.strip(),
+        "binaries": {p.name: sha(p) for p in sorted(Path(args.bin_dir).glob("dec*")) if p.is_file() and p.name in ("decdock", "decbar", "decthemectl", "declaunch", "decspot")},
+        "rdwm": {"path": str(args.rdwm), "sha256": sha(args.rdwm)}, "rdwmctl": {"path": str(args.rdwmctl), "sha256": sha(args.rdwmctl)},
+        "harness": {p.name: sha(p) for p in (Path(__file__), Path(private_x11.__file__))},
+        "themes": {p: sha(repo / "themes" / p / "theme.toml") for p in args.packages.split(",")},
+        "entries": report, "failures": failures,
+        "limits": ["X11 only; no Wayland", "network/audio/battery/bluetooth zones need system data this private world does not have, so they are checked as effective settings only"],
+    }
+    (out / "report.json").write_text(json.dumps(manifest, indent=2))
+    print(json.dumps({"entries": len(report), "failures": failures}))
+    sys.exit(1 if failures else 0)
+
+
+if __name__ == "__main__":
+    main()
