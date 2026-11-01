@@ -315,3 +315,20 @@ raced input readiness; the second mixed reused protocol IDs across generations.
 Contract checks now examine each panel's fresh trace interval. Native remaining
 phases, optimized artifacts, X11 regressions and rendered/hardware fidelity remain
 open; five passing dev-binary phases do not qualify the complete transport.
+
+Storage and DND native acceptance: `/var/tmp/dn-native-09/result.json` and
+`/var/tmp/decebal-notify-native-persistence-focused-control/result.json` pass
+contract/bus/persistence/DND on the same pinned dev binary. An unwritable private
+state directory produces pending/error state; after permissions are restored,
+clicking Retry saves it. Ordinary DND banners and fake sound-player invocations are
+suppressed, critical banners still appear. No actual audio backend was exercised.
+All owned children exit normally; no forced/rescue cleanup or resource abort.
+The preceding seven-phase attempt (`dn-native-08`) was interrupted by the resource
+guard at 12.6% full I/O stalls before reaching storage/DND. SIGTERM cleanup succeeded
+without forcing or rescuing children. It remains interrupted evidence, not a pass.
+After a separate five-second observation (max 0.4939% stalls), one smaller focused
+attempt passed; the guard threshold was unchanged.
+Checkpoint `/var/tmp/decebal-notification-native-checkpoint-20261102.json` records
+8 distinct qualified selected phases across matched dev-binary runs. Themes,
+scale/output cases, burst and explicit output pinning remain pending, along with
+optimized/X11/visual/hardware acceptance. This is not full transport acceptance.
