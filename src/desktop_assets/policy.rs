@@ -256,6 +256,15 @@ fn label(k: Provides) -> &'static str {
 /// while that pack is being downloaded, keep their value), custom slots stay. Returns notes for the apply report.
 pub fn apply_theme(doc: &mut Value, rec: &Recommendation) -> Vec<String> {
     let mut notes = Vec::new();
+    // A legacy explicit app-icon choice predates ownership records. Migrate it
+    // as a user choice, rather than silently replacing it with a recommendation.
+    if doc.get(KEY).and_then(|a| a.get("icons")).is_none() {
+        let legacy = doc.get("system").and_then(|s| s.get("iconTheme")).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+        if let Some(name) = legacy {
+            set_current(doc, Provides::Icons, Some(&name));
+            put_state(doc, Provides::Icons, &SlotState { mode: Mode::Custom, ..SlotState::default() });
+        }
+    }
     let auto = downloads_auto(doc);
     for k in [Provides::Icons, Provides::Cursors] {
         let mut st = state(doc, k);
@@ -524,7 +533,8 @@ mod tests {
     fn icon_choices_and_theme_following_retire_the_legacy_app_only_override() {
         let mut doc = json!({"system":{"iconTheme":"OldPapirus","enabled":true},"icons":{"theme":"Adwaita"}});
         apply_theme(&mut doc, &rec("deepin", Some("bloom"), None));
-        assert_eq!(current(&doc, Provides::Icons).as_deref(), Some("bloom"));
+        assert_eq!(current(&doc, Provides::Icons).as_deref(), Some("OldPapirus"));
+        assert_eq!(owner(&doc, Provides::Icons), Owner::User);
         assert!(doc["system"].get("iconTheme").is_none());
         assert_eq!(doc["system"]["enabled"], true);
         doc["system"]["iconTheme"] = json!("stale");
