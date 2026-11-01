@@ -232,3 +232,13 @@ The 12 Python fixture-helper tests also pass. These are compile/model/helper pro
 no native compositor was run. Wayland-only and X11-only checks, native resize/scale
 churn, mapped-memory/RSS observations and per-buffer creation cost remain pending.
 The 4 KiB accounting caveat for larger-page kernels above still applies.
+
+At `c11c798`, sequential all-target `cargo check --locked --offline -j1
+--no-default-features --features x11` and the corresponding `--features wayland`
+checks both passed, with stable source fingerprints. Evidence:
+`/var/tmp/decebal-notify-pool-feature-matrix-retry2/result.json` and `check.log`.
+The initial Wayland-only attempts exposed X11 QA examples and an Xvfb-dependent
+appmenu integration module missing feature requirements; these are now gated on
+`x11`, retaining their X11 coverage. X11-only compilation emits two existing
+dead-code warnings (`Announcer::invalidate` and `Tracker::replace`); this is not
+a strict-clippy pass. Native transport and memory acceptance remain pending.
