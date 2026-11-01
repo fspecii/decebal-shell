@@ -152,3 +152,19 @@ then everything closed: no surfaces, no held buffers, small pool, bounded RSS gr
 `README.md` (still says X11 only), `contrib/decebal-notify.service`, `contrib/dbus/org.freedesktop.Notifications.service`
 (both say decnotify refuses to run under Wayland), the `make e2e` notification target, packaging, and the
 decsettings notification pane text should be revisited after qualification.
+
+## Focused presentation verification (2026-11-01)
+
+The exact `src/notify/present.rs` at c02a3d9 was compiled as a standalone
+Rust test target with the existing cached `serde_json` dependency. All 13
+presentation tests passed, including delayed releases, resize/scale churn,
+callback fallback, latest-frame coalescing, and memory-budget refusal.
+The module SHA-256 before and after was
+`e3a694daf021daa2a2acf0c7466372ff7d90c2f77419d4cc82bbbb977ff6eb2d`.
+Evidence: `/var/tmp/decebal-notify-present-unit-retry2/result.json` and
+`tests.log` in that directory. The resource runner restored the shared pause.
+
+This proves the presentation state-machine tests only. It does not qualify
+the whole crate, SCTK transport, compositor behavior, or native rendering.
+The preceding standalone attempt failed because its harness omitted the
+`serde_json` dependency; it is retained as failed harness evidence.
