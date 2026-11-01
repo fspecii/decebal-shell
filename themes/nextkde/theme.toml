@@ -1,11 +1,11 @@
 format = 1
 id = "nextkde"
 name = "NextKDE"
-version = "1.1.0"
+version = "1.2.0"
 author = "decebal"
 license = "MIT"
 description = "NextKDE-inspired soft glass, a global top bar and a floating dock."
-min_shell_version = "0.1.0"
+min_shell_version = "0.3.0"
 tags = ["glass", "floating-dock", "nextkde"]
 
 [metrics]
@@ -36,6 +36,9 @@ magnification = 1.4
 enabled = true
 style = "flat"
 height = 26
+
+[launcher]
+style = "kde"
 
 [decoration]
 style = "macos"

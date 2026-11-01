@@ -549,3 +549,21 @@ and `check.log`. This executes every catalogue style in both modes, the legacy
 side override, matching/stale fallback handling, icon policy transitions and
 toolkit effective-config ownership. It does not replace native GTK/gsettings
 or visual-fidelity acceptance.
+
+### Native component defaults (source candidate, 2026-11-02)
+
+Windows 11 now selects the Windows Start launcher and native Windows caption
+cells in light/dark modes, with Classic as a capability-checked fallback.
+NextKDE selects Kickoff but retains its documented glass/mac-dock adaptation.
+GNOME Adwaita selects the GNOME app grid and mode-specific Adwaita controls,
+also with a Classic fallback. Windows/NextKDE package versions and minimum shell
+requirements are bumped. The GNOME framework fixture is updated in step with
+the shipped package. This is reuse of existing native renderers, not a claim of
+pixel-identical upstream launchers or a full GNOME Overview.
+
+The Windows legacy-token test keeps its frozen colors and metrics oracle, with
+one explicit expected change for the native Start layout. Native caption/style
+selection has a separate package-resolution contract. The Windows flat-token
+Classic value remains a legacy capture/fallback representation; the modern
+mode-specific style keys control rdwm. Native captures, capability fallback and
+full package tests must pass before deployment. No live theme was applied.

@@ -76,8 +76,14 @@ mono = ["Adwaita Mono", "JetBrains Mono", "Noto Sans Mono"]
 display = ["Adwaita Sans", "Cantarell", "Inter", "Noto Sans"]
 scale = 1.0
 
+[launcher]
+style = "gnome"
+
 [decoration]
 style = "adwaita"
+style_light = "adwaita-light"
+style_dark = "adwaita"
+fallback_style = "classic"
 height = 47                     # headerbar min-height 47 px
 radius = 15                     # --window-radius = $button_radius 9 + 6
 title_align = "center"          # headerbar title is centred

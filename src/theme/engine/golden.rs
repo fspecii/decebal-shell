@@ -78,7 +78,12 @@ fn every_builtin_resolves_to_the_same_theme_as_before() {
                 continue;
             }
             for sel in selections() {
-                let (a, b) = (new.resolve(id, dark, &sel), old.resolve(id, dark, &sel));
+                let (a, mut b) = (new.resolve(id, dark, &sel), old.resolve(id, dark, &sel));
+                // Windows now selects its native Start layout; legacy colour/metric tokens stay unchanged.
+                // The package/component contract separately checks the actual caption style and fallback.
+                if *id == "windows11" {
+                    b.launcher_style = "windows".into();
+                }
                 assert_eq!(a, b, "{id} dark={dark} {sel:?}");
             }
         }
