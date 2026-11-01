@@ -352,7 +352,7 @@ impl Drop for AppMenus {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "x11"))]
 mod real_tests;
 #[cfg(test)]
 pub(crate) mod testbus;
