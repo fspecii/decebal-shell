@@ -270,3 +270,21 @@ main finally block runs. Cleanup signals all owned pidfds first, shares a six-se
 grace period and continues closing other children/descriptors after an individual
 error. Sixteen parser/measurement/cleanup helper tests pass. This does not replace
 a real resource-abort cleanup test; forced or rescued children still fail the gate.
+
+## First native contract and allocation acceptance (2026-11-02)
+
+A separately pinned development binary built from production source `b729545`
+(SHA256 `c343ee454a3afd5092557c333d81097a5af436b31c688f6a0457cd8c18e8a8be`)
+passed the contract, duplicate-bus-owner and scale/size churn phases on private
+headless Sway with two outputs. Harness revision `415cacf`, clean source fingerprint
+`548ac636d463ef7ada37ddec091dad80fa195b3cc5d993e87afdcdf78b5dbdc6`.
+Evidence `/var/tmp/dn-native-02/result.json` and
+`/var/tmp/decebal-notify-native-churn-control/result.json`.
+No failures, forced stops, rescue cleanup or resource abort; all owned children
+were reaped. DISPLAY was unset and the current desktop was not contacted.
+Kernel samples: notification shm 0 before the initial commit, 2,596,864 bytes after
+churn with banners/panel active, then 0 at idle; fd counts 8, 14, 8; RSS 14,624,
+16,528, 14,164 KiB. These are finite samples, not a continuous maximum. The wire
+and model counters also stayed within their configured bounds. This proves the
+selected dev-binary protocol/lifecycle/allocation checks, not pixels, physical
+hardware, optimized artifacts, all fixture phases or X11 regression acceptance.
