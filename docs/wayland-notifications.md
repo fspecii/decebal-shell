@@ -288,3 +288,16 @@ churn with banners/panel active, then 0 at idle; fd counts 8, 14, 8; RSS 14,624,
 and model counters also stayed within their configured bounds. This proves the
 selected dev-binary protocol/lifecycle/allocation checks, not pixels, physical
 hardware, optimized artifacts, all fixture phases or X11 regression acceptance.
+
+Native queue/action checkpoint: `/var/tmp/dn-native-04/result.json` and
+`/var/tmp/decebal-notify-native-actions-control-retry1/result.json` pass contract,
+bus ownership, queue and action phases on the same pinned dev binary. This proves
+five-visible/two-queued lifetimes, replacement, promotion, expiry reason 1, explicit
+close reason 3, reply/resident action signals and keyboard focus remaining with the
+native sink. No forced/rescue cleanup or resource abort. Default-action activation,
+all button variants, rendered fidelity and hardware remain outside this proof.
+The first attempt (`dn-native-03`) failed because the headless seat advertised no
+pointer and lost its only keyboard between short wtype clients; no pointer object
+was bound. The corrected fixture keeps an owned virtual pointer and keyboard,
+asserts seat capabilities and input preflight, and verifies pointer binding before
+actions. Failed evidence is retained, not counted as product acceptance.
