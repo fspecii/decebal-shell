@@ -21,6 +21,8 @@ suites=[('default','native.py','DECFILES_BIN','DECFILES_EVIDENCE','navigation'),
  ('fixture-delay','open-dispatch-native.py','DECFILES_FIXTURE_BIN','DECFILES_OPEN_DISPATCH_EVIDENCE','open-dispatch'),
  ('fixture-delay','theme-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_THEME_RACES_EVIDENCE','theme-races')]
 sources={str(p.relative_to(source_root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_root.rglob('*')) if p.is_file() and 'target' not in p.parts and (p.suffix=='.rs' or p.name in ('Cargo.toml','Cargo.lock'))}
+# Pure helper precondition: mocked registry isolation must pass before any native suite starts.
+subprocess.run([sys.executable,'-I',str(here/'openfix-test.py')],check=True)
 summary={}
 for kind,script,bin_var,out_var,name in suites:
     if len(sys.argv)>3 and name not in sys.argv[3:]:continue

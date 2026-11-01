@@ -770,3 +770,8 @@ published, B to survive A's completion, and repeated A to remain deduplicated.
 This new fixture has passed Python syntax checking only; its feature build and
 native execution remain unrun. Production builds ignore the callback-delay
 variable entirely.
+
+The native gate driver now executes `openfix-test.py` as a prerequisite before
+starting any suite. Its three mocked registry-isolation tests pass; they prove
+the helper's setup/command contract only, not GIO's runtime registry discovery.
+The native no-handler precondition and native Open suites remain required.
