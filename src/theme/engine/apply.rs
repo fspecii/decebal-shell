@@ -815,12 +815,28 @@ pub mod tests {
     use crate::theme::engine::archive::{Entry, Limits};
     use crate::theme::engine::package::{install_entries, tests::png};
 
+    /// A test-only `rdwmctl` that answers `schema --offline` with the bundled schema and accepts `check-config` (syntax already parsed by
+    /// `io::validate`), so capability-aware themes get an explicit offline target and never a live desktop probe. Any other command fails.
+    pub fn fixture_rdwmctl(dir: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let ctl = dir.join("fixture-rdwmctl");
+        let schema = include_str!("../../settings/rdwm-schema.json");
+        std::fs::write(
+            &ctl,
+            format!("#!/bin/sh\nif [ \"$1 $2\" = \"schema --offline\" ]; then cat <<'RDWM_SCHEMA_EOF'\n{schema}\nRDWM_SCHEMA_EOF\nelif [ \"$1\" = check-config ]; then exit 0; else exit 2; fi\n"),
+        )
+        .unwrap();
+        std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o700)).unwrap();
+        ctl
+    }
+
     pub fn sandbox(name: &str) -> (PathBuf, Source, Paths) {
         let d = std::env::temp_dir().join(format!("decebal-apply-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("shell")).unwrap();
         std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
-        let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("none.sock") };
+        let ctl = fixture_rdwmctl(&d);
+        let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: ctl, socket: d.join("none.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: d.join("cfg/themes") };
         (d, src, paths)
     }

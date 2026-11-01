@@ -45,6 +45,11 @@ The widget gate checks same-host output loss/recovery, readiness deletion before
 For deployment, qualify the version-matched data bundle as well as the binaries. A running `DECEBAL_SYSTEM_THEMES` can remain pinned to an older release even after executable replacement. Verify that the new launch environment points to the new immutable system-data directory; preserve user theme overrides and retain the old bundle for rollback. See [release verification](../tools/release/README.md). A result for one supplied binary is never acceptance of a different build.
 
 
+## Widget creator (source-only candidate)
+
+`tests/e2e/widget-creator-native.py` drives Settings > Widgets > Create on an owned Xvfb and covers file creation, config preservation, host readiness and the asynchronous JSON-commit failure rollback and retry. It is **not yet run**; see [its description and limits](widget-creator-native.md). Do not run the older `widget-creator-icons.sh`.
+
+
 ## Integrated source qualification checkpoint
 
 Source `677af74` passed the complete library suite under a private D-Bus session and the serialized resource

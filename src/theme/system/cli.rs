@@ -129,6 +129,7 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
             Ok(())
         }
         Some("status") | None => {
+            let cfg = super::effective_config(&src.shell_json);
             let st = status(&env, &cfg);
             let applied = super::applied_theme(&env);
             if json {
@@ -179,19 +180,23 @@ fn system(args: &[String], src: &Source, json: bool) -> Result<(), String> {
         Some("set") => {
             let (Some(k), Some(v)) = (args.get(1), args.get(2)) else { return Err("set needs KEY VALUE".into()) };
             let unset = v == "none" || v.is_empty();
+            if matches!(k.as_str(), "icon-theme" | "cursor-theme") {
+                use crate::desktop_assets::{policy, Provides};
+                let slot = if k == "icon-theme" { Provides::Icons } else { Provides::Cursors };
+                let choice = if unset { policy::Choice::Auto } else { policy::Choice::Name(v.clone()) };
+                policy::choose_in_file(&src.shell_json, slot, &choice)?;
+                if cfg.enabled {
+                    print_report(&apply_now(src, &Opts::default())?, false);
+                }
+                return Ok(());
+            }
             match k.as_str() {
-                "icon-theme" => cfg.icon_theme = (!unset).then(|| v.clone()),
-                "cursor-theme" => cfg.cursor_theme = (!unset).then(|| v.clone()),
                 "signals" => cfg.signals = matches!(v.as_str(), "true" | "on" | "1" | "yes"),
                 "gtk-font" => cfg.set_option("gtk.font", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
                 "gtk-theme" => cfg.set_option("gtk.theme", matches!(v.as_str(), "true" | "on" | "1" | "yes" | "default")),
                 other => return Err(format!("unknown key `{other}`")),
             }
             cfg.save(&src.shell_json)?;
-            if k == "cursor-theme" {
-                // an explicit choice: applying a theme keeps it (docs/desktop-asset-packs.md)
-                crate::desktop_assets::policy::mark_user(&src.shell_json, crate::desktop_assets::Provides::Cursors)?;
-            }
             if cfg.enabled {
                 print_report(&apply_now(src, &Opts::default())?, false);
             }
@@ -233,5 +238,34 @@ fn xsettings(args: &[String]) -> Result<(), String> {
     {
         let _ = display;
         Err("this build has no X11 support".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_icon_choices_replace_theme_ownership_and_reach_the_effective_config() {
+        use crate::desktop_assets::{policy, Provides};
+        let dir = std::env::temp_dir().join(format!("decebal-cli-icon-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = Source { shell_json: dir.join("decebal.json"), themes_dir: dir.join("themes") };
+        std::fs::write(
+            &src.shell_json,
+            r#"{"system":{"enabled":false},"icons":{"theme":"Adwaita"},"asset_packs":{"icons":{"mode":"follow","theme":"gnome-adwaita","applied":"Adwaita"}},"future":42}"#,
+        )
+        .unwrap();
+        for (name, expected) in [("Papirus", Some("Papirus")), ("none", None)] {
+            system(&["set".into(), "icon-theme".into(), name.into()], &src, false).unwrap();
+            let doc: serde_json::Value = serde_json::from_slice(&std::fs::read(&src.shell_json).unwrap()).unwrap();
+            assert_eq!(policy::current(&doc, Provides::Icons).as_deref(), expected);
+            assert_eq!(policy::owner(&doc, Provides::Icons), policy::Owner::User);
+            assert_eq!(super::super::effective_config(&src.shell_json).icon_theme.as_deref(), expected);
+            assert!(doc["system"].get("iconTheme").is_none());
+            assert_eq!(doc["future"], 42);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

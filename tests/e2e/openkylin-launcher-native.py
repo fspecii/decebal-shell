@@ -385,6 +385,62 @@ def click_coloured_app(gate, private, calls, theme, shots, scale=1, mode="light"
             gate.stop("declaunch", proc)
 
 
+
+def matrix_cases(quick=False, shard_index=0, shard_count=1):
+    cases = [((1600, 900), 1, "light", "bottom")] if quick else [(s, k, m, e) for s in SCREENS for k in SCALES for m in ("light", "dark") for e in EDGES]
+    if not 1 <= shard_count <= len(cases) or not 0 <= shard_index < shard_count:
+        raise ValueError("invalid shard index/count")
+    return cases[shard_index::shard_count]
+
+
+def case_tag(case):
+    (w, h), scale, mode, edge = case
+    return f"{w}x{h}-{int(scale * 100)}-{mode}-{edge}"
+
+
+def verify_shards(records):
+    """Require complete, disjoint, clean evidence from the exact same inputs."""
+    expected = {case_tag(c) for c in matrix_cases()}
+    seen, indices = set(), set()
+    count, inputs = None, None
+    pointer = False
+    if not records:
+        raise ValueError("no shard evidence")
+    for record in records:
+        if record.get("quick"):
+            raise ValueError("quick evidence cannot qualify the matrix")
+        shard = record["shard"]
+        index, total = shard["index"], shard["count"]
+        selected = {case_tag(c) for c in matrix_cases(False, index, total)}
+        if count is None:
+            count = total
+            inputs = {k: v for k, v in record["inputs"].items() if k != "fixture_desktop_entries"}
+        comparable = {k: v for k, v in record["inputs"].items() if k != "fixture_desktop_entries"}
+        if not comparable.get("fixture_desktop_entries_normalized"):
+            raise ValueError("missing normalized fixture identity")
+        if total != count or index in indices or comparable != inputs:
+            raise ValueError("duplicate shard or mismatched inputs/count")
+        indices.add(index)
+        cleanup = record["cleanup"]
+        if cleanup["run_failed"] or cleanup["error"] or cleanup["forced"] or cleanup["rescues"]:
+            raise ValueError("interrupted or unclean shard")
+        tags = [r["tag"] for r in record["runs"]]
+        if len(tags) != len(selected) or set(tags) != selected or record["passed"] != len(tags):
+            raise ValueError("missing, duplicate, or unexpected cases")
+        if seen.intersection(tags):
+            raise ValueError("overlapping shard coverage")
+        seen.update(tags)
+        launch = record.get("pointer_launch")
+        if launch is not None:
+            if launch.get("launched") != "red" or launch.get("exit_code") != 0 or launch.get("red_pixels", 0) <= 40:
+                raise ValueError("pointer launch not proven")
+            pointer = True
+    if indices != set(range(count)) or seen != expected or not pointer:
+        raise ValueError("incomplete matrix or missing pointer launch")
+    return {"passed": True, "cases": len(seen), "shards": count, "inputs": inputs,
+            "scope": "UKUI native matrix only; not full release qualification"}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--bin", required=True, help="the candidate declaunch (copied into the private bin; installed siblings are never used)")
@@ -393,7 +449,13 @@ def main():
     ap.add_argument("--package", default=str(ROOT / "themes/openkylin"), help="the openkylin package copied into the private themes dir")
     ap.add_argument("--quick", action="store_true", help="smoke: one 1600x900 scale-1 light run on the bottom edge plus the click run")
     ap.add_argument("--captures", choices=("bottom", "all"), default="bottom", help="which runs keep their PNGs (the checks always run)")
+    ap.add_argument("--shard-index", type=int, default=0)
+    ap.add_argument("--shard-count", type=int, default=1, help="split coverage across separately guarded runs; aggregate all shards before claiming full acceptance")
     args = ap.parse_args()
+    try:
+        matrix = matrix_cases(args.quick, args.shard_index, args.shard_count)
+    except ValueError as error:
+        ap.error(str(error))
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=False)
     binary, package = Path(args.bin).resolve(), Path(args.package).resolve()
@@ -424,9 +486,9 @@ def main():
             "start_button_logo": sha(package / "icons/kylin-startmenu.png") if (package / "icons/kylin-startmenu.png").exists() else None,
             "private_x11.py": sha(helper), "harness": sha(__file__),
             "fixture_desktop_entries": {p.name: sha(p) for p in sorted((private / "data/applications").glob("*.desktop"))},
+            "fixture_desktop_entries_normalized": {p.name: hashlib.sha256(p.read_bytes().replace(os.fsencode(private), b"<PRIVATE>")).hexdigest() for p in sorted((private / "data/applications").glob("*.desktop"))},
             "fixture_icons": {p.name: sha(p) for p in sorted((private / "icons").glob("*.svg"))},
         }
-        matrix = [((1600, 900), 1, "light", "bottom")] if args.quick else [(s, k, m, e) for s in SCREENS for k in SCALES for m in ("light", "dark") for e in EDGES]
         try:
             # one owned Xvfb per screen size
             for screen in dict.fromkeys(item[0] for item in matrix):
@@ -460,7 +522,7 @@ def main():
                 ledger_error = str(error)
             (out / "native-launcher.json").write_text(json.dumps({
                 "note": "UKUI start menu driven natively on an owned private X server (no compositor, no panel, no theme apply); synthetic fixture apps; not an upstream pixel comparison",
-                "quick": args.quick, "inputs": hashes, "token": gate.token, "fake_tool_calls": actions.read_text().splitlines(),
+                "quick": args.quick, "shard": {"index": args.shard_index, "count": args.shard_count}, "inputs": hashes, "token": gate.token, "fake_tool_calls": actions.read_text().splitlines(),
                 "cleanup": {"forced": gate.forced, "rescues": gate.rescues, "events": gate.events, "error": ledger_error, "run_failed": in_flight},
                 "pointer_launch": click, "runs": runs, "passed": len(runs)}, indent=1))
             if ledger_error:

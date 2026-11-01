@@ -23,7 +23,7 @@ security boundary: direct commands that bypass the runner can still consume reso
 
 Each command gets nice 19, idle I/O priority, `CARGO_BUILD_JOBS=1` and `RUST_TEST_THREADS=1`. Explicit Cargo job
 counts above one are refused. Developer/test debug info defaults to zero unless the caller explicitly selected
-it. An existing `CARGO_TARGET_DIR` is preserved; otherwise a persistent cache outside the checkout is selected
+it. Direct Cargo jobs treat an existing `CARGO_TARGET_DIR` or `--target-dir` as a cache base and append `desktop-sources/<source-path-hash>`. The resolved manifest directory (or current directory) owns that leaf, preventing cross-worktree root-product reuse. Otherwise a persistent cache outside the checkout is selected
 from its absolute path. Do not launch parallel builds from inside one wrapper or override the thread limits in
 the test executable. Build evidence must record any explicit profile changes.
 
@@ -74,3 +74,93 @@ Initial checkpoint: five synthetic identity/counter/privacy/output tests passed,
 observation completed with a maximum measured full stall of 0.026%. The preceding quiet-period sample had
 contained a 44.921% one-second spike, so heavy jobs remain coordinated rather than broadly resumed.
 Evidence: `/var/tmp/decebal-observer-first-baseline.json`.
+
+Cancellation gives the direct fixture up to ten seconds to finish its own
+cleanup before forcing the command group down. Both machine slots remain held
+through that interval. Multi-phase drivers must also handle SIGTERM and wait
+for their active fixture; an immediately exiting driver cannot preserve a
+fixture's cleanup window. Detached private compositors still require their
+fixture's owned-handle shutdown and must not be killed by process name.
+
+For native release gates, pass `--quiet-seconds 5` before `--`. The runner holds
+both slots and measures the existing I/O budget before creating the command.
+An over-budget observation refuses admission with exit 75, leaves jobs paused,
+and starts no fixture. It does not retry automatically or change the runtime
+pressure threshold. The observation accepts 1–30 seconds (0 disables it).
+
+Use `desktop_observe.py --disks --seconds 10 --out <fresh.json>` to include
+whole-device read/write/flush completion latency, active time and average queue
+depth alongside PSI and process activity. This only reads counters and creates
+no I/O workload. Partition rows are excluded; device-mapper and physical devices
+may describe the same I/O and must not be summed. Counter resets/new devices are
+skipped. Active time on modern parallel devices is not a saturation metric or a
+disk-health test. Field definitions follow the
+[Linux kernel I/O statistics documentation](https://docs.kernel.org/admin-guide/iostats.html).
+
+## Read-only shell health
+
+`python3 tools/dev/shell_health.py --receipt /path/to/runtime.json` checks a
+receipt's `components` list (`name`, `pid`, absolute `target`, and ideally
+`starttime` from Linux stat field 22 plus `sha256`). It never signals or restarts
+processes. Missing processes, zombies, reused PIDs, changed binaries, foreign
+owners, and unreadable identities remain distinct. An old receipt without a
+start time is explicitly inconclusive even when the executable matches.
+
+For an intentionally absent dock, add `--dock-probe /absolute/path/decdock
+--dock-sha256 <verified-digest>` in the actual desktop session environment.
+Only the hash-checked binary's read-only `--wanted` query runs. A disabled dock
+is then reported as configured off rather than failed. No probe is run by
+default. Exit 0 means all supplied components have verified running identities
+or are a confirmed disabled dock, 1 means incomplete health, and 2 means an
+invalid input or failed probe. This is process identity evidence, not proof of
+visual correctness, event-loop responsiveness, or a complete component inventory.
+
+Run the isolated process-identity tests with `python3 -I tests/shell-health.py`.
+
+## Smaller UKUI native qualification runs
+
+The UKUI launcher gate accepts `--shard-count 12 --shard-index 0` (indices 0–11),
+which divides the original 72 screen/scale/mode/edge cases into six cases per
+run. Each shard must use a new evidence directory and the same sealed binary,
+theme package, helper, harness and fixture definitions. Run each separately
+through the shared resource guard. Default invocation still runs all 72 cases.
+No earlier interrupted result is reused or relabelled as passing.
+
+Aggregate all completed results with:
+
+```sh
+python3 tests/e2e/openkylin-launcher-shards.py /evidence/shard*/native-launcher.json
+```
+
+The aggregator refuses incomplete, repeated, interrupted, unclean, overlapping,
+quick-only or mismatched-input evidence and requires a successful real pointer
+launch. Raw desktop-entry hashes are retained, and a second normalized digest
+replaces only the random private-directory prefix for cross-run comparison.
+All other input hashes must match. Passing helper tests proves this coverage
+accounting, not the native product behavior; the shards still need native runs.
+
+Direct Cargo target isolation does not inspect Cargo launched inside a shell or Python controller.
+Such controllers must use a checkout-owned target themselves and record positive test counts/names;
+a successful exit with zero matching tests is not regression evidence. Never seed a target with
+another checkout's root-crate fingerprints or incremental state.
+
+
+## Explicit artifact byte receipts
+
+`artifact_snapshot.py` records SHA256 and size for caller-selected relative paths,
+then verifies those same bytes before/after a gate. Use immutable copied artifacts,
+not the live installed directory. It never builds, installs, signals a process or
+infers which source revision produced a binary. A matching receipt is **not** a
+signature or source-build attestation; keep the producing job/revision separately.
+
+```sh
+python3 tools/dev/desktop_job.py -- python3 tools/dev/artifact_snapshot.py snapshot --root /var/tmp/my-artifacts --output /var/tmp/my-receipt.json bin/decnotify bin/decthemectl
+python3 tools/dev/desktop_job.py -- python3 tools/dev/artifact_snapshot.py verify --root /var/tmp/my-artifacts --manifest /var/tmp/my-receipt.json
+```
+
+The receipt must be new and is written mode 0600. Artifact paths are normalized
+relative paths; symlink components, non-regular files, duplicates, more than 256
+entries, files over 1 GiB, and files replaced/changed while hashing are refused.
+Verification reads no file outside the explicit artifact root. Reads can still
+cost I/O, so large snapshots use the shared desktop runner. Tests are temporary
+file-only: `python3 tests/artifact-snapshot.py`.

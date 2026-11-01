@@ -14,6 +14,13 @@ fn current(m: &Model) -> Config {
 
 pub fn items(m: &Model) -> Vec<Item> {
     let cfg = current(m);
+    let icons = m.json_value_now("shell", "icons").unwrap_or_default();
+    let icon_name = icons
+        .get("theme")
+        .and_then(serde_json::Value::as_str)
+        .map(|name| if name.eq_ignore_ascii_case("auto") { "" } else { name })
+        .unwrap_or_else(|| cfg.icon_theme.as_deref().unwrap_or_default())
+        .to_string();
     let env = Env::discover();
     let st = system::status(&env, &cfg);
     let applied = system::applied_theme(&env);
@@ -77,8 +84,8 @@ pub fn items(m: &Model) -> Vec<Item> {
     out.push(Item::Card(opts));
     out.push(Item::Card(vec![
         Row::new("Icon theme for apps")
-            .detail("Optional: set this icon theme in GTK and Qt apps (empty = leave it alone)")
-            .ctl(Ctl::new("sy:icon", Kind::Text { val: cfg.icon_theme.clone().unwrap_or_default(), hint: "Papirus".into() })),
+            .detail("Use this icon theme for the shell, GTK and Qt apps. Empty uses the toolkit default; choose Follow theme in Icons to restore theme matching.")
+            .ctl(Ctl::new("sy:icon", Kind::Text { val: icon_name, hint: "Papirus".into() })),
         Row::new("Cursor theme for apps")
             .detail("Optional: set this cursor theme for GTK and X11 clients")
             .ctl(Ctl::new("sy:cursor", Kind::Text { val: cfg.cursor_theme.clone().unwrap_or_default(), hint: "Bibata-Modern-Classic".into() })),
@@ -164,8 +171,10 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             });
         }
         (["sy", "icon"], CtlVal::Str(s)) => {
-            cfg.icon_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            save_then(m, &cfg, request);
+            let name = s.trim().to_string();
+            let pick = if name.is_empty() { crate::desktop_assets::policy::Choice::Auto } else { crate::desktop_assets::policy::Choice::Name(name.clone()) };
+            let said = format!("Icon theme for apps: {}", if name.is_empty() { "not set" } else { &name });
+            m.edit_shell_doc("system-icons", move |doc| crate::desktop_assets::policy::choose(doc, crate::desktop_assets::Provides::Icons, &pick), said, Some(Box::new(request)));
         }
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
@@ -215,7 +224,12 @@ mod tests {
         m.apply("sy:t:gtk", CtlVal::Bool(false));
         m.apply("sy:icon", CtlVal::Str(" Papirus ".into()));
         let c = Config::load(&m.paths.shell_json());
-        assert_eq!((c.targets.get("gtk").copied(), c.icon_theme.as_deref()), (Some(false), Some("Papirus")));
+        assert_eq!(c.targets.get("gtk").copied(), Some(false));
+        assert_eq!(c.icon_theme, None, "legacy second authority is retired");
+        assert_eq!(m.json_value_now("shell", "icons").unwrap()["theme"], "Papirus");
+        assert!(items(&m)
+            .iter()
+            .any(|item| matches!(item, Item::Card(rows) if rows.iter().flat_map(|row| &row.ctls).any(|ctl| ctl.id == "sy:icon" && matches!(&ctl.kind, Kind::Text { val, .. } if val == "Papirus")))));
         assert_eq!(toggle(&items(&m), "sy:t:gtk").map(|t| t.0), Some(false));
         m.apply("sy:t:nonsense", CtlVal::Bool(true));
         assert!(!Config::load(&m.paths.shell_json()).targets.contains_key("nonsense"));

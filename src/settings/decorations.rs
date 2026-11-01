@@ -50,11 +50,24 @@ pub fn choices_for(schema: &Schema, rt: &super::io::Runtime) -> Vec<(&'static st
     }
 }
 
+fn catalogue() -> &'static serde_json::Value {
+    static CATALOGUE: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    CATALOGUE.get_or_init(|| serde_json::from_str(include_str!("decoration-catalogue.json")).expect("generated native decoration catalogue"))
+}
+
+/// Button placement from the same generated native catalogue as the titlebar geometry.
+pub fn buttons_right(style: &str) -> Option<bool> {
+    let row = catalogue().as_array()?.iter().find(|row| row["id"] == style)?;
+    match row["side"].as_str()? {
+        "Right" => Some(true),
+        "Left" => Some(false),
+        _ => None,
+    }
+}
+
 /// Generated directly by the native rdwm-deco helper, not guessed generic macOS metrics.
 pub fn default_value(style: &str, key: &str) -> Option<Val> {
-    static CATALOGUE: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
-    let rows = CATALOGUE.get_or_init(|| serde_json::from_str(include_str!("decoration-catalogue.json")).expect("generated native decoration catalogue"));
-    let value = rows.as_array()?.iter().find(|row| row["id"] == style)?.get("defaults")?.get(key)?;
+    let value = catalogue().as_array()?.iter().find(|row| row["id"] == style)?.get("defaults")?.get(key)?;
     match value {
         serde_json::Value::String(s) => Some(Val::Str(s.clone())),
         serde_json::Value::Number(n) => n.as_i64().map(Val::Int),

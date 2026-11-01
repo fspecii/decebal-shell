@@ -52,6 +52,34 @@ class DesktopJobTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def test_cargo_targets_cannot_reuse_another_checkout_product(self):
+        module = self.module()
+        shared = self.root / 'shared-target'
+        a, b = self.root / 'checkout-a', self.root / 'checkout-b'
+        first = {'CARGO_TARGET_DIR': str(shared)}
+        second = dict(first)
+        module.source_target(['cargo', 'test'], first, self.root, a)
+        module.source_target(['cargo', 'test'], second, self.root, b)
+        self.assertNotEqual(first['CARGO_TARGET_DIR'], second['CARGO_TARGET_DIR'])
+        self.assertTrue(Path(first['CARGO_TARGET_DIR']).is_relative_to(shared))
+        again = {'CARGO_TARGET_DIR': str(shared)}
+        module.source_target(['cargo', 'test'], again, self.root, a)
+        self.assertEqual(first, again)
+
+    def test_manifest_and_cli_target_override_are_scoped_together(self):
+        module = self.module()
+        a, b = self.root / 'a', self.root / 'b'
+        for target_args in (['--target-dir', 'cache'], ['--target-dir=cache']):
+            env = {'CARGO_TARGET_DIR': 'ignored'}
+            result = module.source_target(
+                ['cargo', 'test', '--manifest-path', str(b / 'Cargo.toml'), *target_args,
+                 '--', '--target-dir=literal-test-argument'], env, self.root, a)
+            expected = {'CARGO_TARGET_DIR': str(a / 'cache')}
+            module.source_target(['cargo', 'test'], expected, self.root, b)
+            self.assertEqual(env['CARGO_TARGET_DIR'], expected['CARGO_TARGET_DIR'])
+            self.assertIn(env['CARGO_TARGET_DIR'], ' '.join(result[:-2]))
+            self.assertEqual(result[-1], '--target-dir=literal-test-argument')
+
     def test_pressure_uses_measured_intervals_and_handles_counter_reset(self):
         module = self.module()
         with patch.object(module, 'io_full_total', side_effect=[100, 200100, 10, 300010]), patch.object(module.time, 'monotonic', side_effect=[0, .5, 2, 3, 5]):
@@ -70,6 +98,41 @@ class DesktopJobTests(unittest.TestCase):
         self.assertEqual(code, 130)
         self.assertTrue((self.slots / 'paused').exists())
         self.assertEqual(self.call('--', sys.executable, '-c', 'pass').returncode, 75)
+
+    def test_admission_pressure_pauses_without_spawning_a_fixture(self):
+        module = self.module()
+        module.directory(self.slots)
+        with patch.object(module.Pressure, 'check', return_value='I/O over budget'), patch.object(module.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(module.Refused, 'no command started'):
+                module.run([sys.executable, '-c', 'pass'], self.slots, 5, quiet_seconds=1)
+            spawn.assert_not_called()
+        self.assertTrue((self.slots / 'paused').exists())
+
+    def test_admission_respects_pause_before_spawning(self):
+        module = self.module()
+        module.directory(self.slots)
+        module.pause_jobs(self.slots)
+        with patch.object(module.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(module.Refused, 'paused before command start'):
+                module.run([sys.executable, '-c', 'pass'], self.slots, 5, quiet_seconds=1)
+            spawn.assert_not_called()
+
+    def test_quiet_admission_starts_the_original_command_once(self):
+        module = self.module()
+        module.directory(self.slots)
+        marker = self.root / 'started-after-admission'
+        code = f'from pathlib import Path;Path({str(marker)!r}).write_text("once")'
+        started = time.monotonic()
+        with patch.object(module.Pressure, 'check', return_value=None):
+            result = module.run([sys.executable, '-c', code], self.slots, 5, quiet_seconds=1)
+        self.assertEqual(result, 0)
+        self.assertGreaterEqual(time.monotonic() - started, 1)
+        self.assertEqual(marker.read_text(), 'once')
+        self.assertFalse((self.slots / 'paused').exists())
+
+    def test_invalid_admission_duration_is_refused(self):
+        for value in ('nan', 'inf', '-1', '.5', '31'):
+            self.assertEqual(self.call('--quiet-seconds', value, '--', sys.executable, '-c', 'pass').returncode, 75)
 
     def test_unavailable_pressure_refuses_before_spawning(self):
         module = self.module()
@@ -149,6 +212,21 @@ class DesktopJobTests(unittest.TestCase):
             if p.poll() is None:
                 p.kill()
                 p.wait()
+
+    def test_cancel_allows_fixture_to_finish_owned_cleanup_and_write_evidence(self):
+        module = self.module()
+        module.directory(self.slots)
+        finished = self.root / 'cleanup-finished'
+        code = (
+            'import signal,time;from pathlib import Path;'
+            f'finished=Path({str(finished)!r});'
+            'signal.signal(signal.SIGTERM,lambda s,f:(time.sleep(2.4),finished.touch(),exit(0)));'
+            'time.sleep(60)'
+        )
+        with patch.object(module.Pressure, 'check', return_value=None):
+            result = module.run([sys.executable, '-c', code], self.slots, .5)
+        self.assertEqual(result, 124)
+        self.assertTrue(finished.exists(), 'cancellation killed the fixture before its cleanup evidence')
 
     def test_execution_deadline_ends_non_detached_grandchild(self):
         pidfile = self.root / 'grandchild'

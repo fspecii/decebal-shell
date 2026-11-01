@@ -502,3 +502,108 @@ Open Settings processes/drafts and desktop daemons were preserved; newly opened
 Settings uses this release. The rest of the shell remains the previously
 qualified a82 runtime. This is isolated X11 release acceptance, not physical
 hardware, Wayland, Qt live-update or full desktop-replica proof.
+
+### Shared icon ownership repair (source candidate, 2026-11-01)
+
+The app icon-theme field now uses the same asset policy as the Icons pane. A
+named choice is custom for both shell and apps; clearing it is an explicit
+automatic choice. Following a theme returns ownership to its recommendation.
+Any new icon-policy write retires the legacy `system.iconTheme` field. Existing
+policy-owned slots also override a leftover legacy value when planning toolkit
+updates, including an explicit automatic slot. An untouched legacy-only config
+keeps its old app-only choice until a policy choice or theme recommendation
+replaces it. Other system keys remain intact.
+
+Regression tests cover theme following over a stale legacy override, custom
+choices surviving a theme switch, automatic selection, and legacy-only
+compatibility. The source is formatted; compilation and execution of these new
+tests are pending. No live configuration migration was performed.
+
+### Decoration-side repair (source candidate, 2026-11-02)
+
+Toolkit button placement now reads the selected mode's decoration style from
+the same generated native catalogue used for rdwm geometry. This replaces the
+macos/classic-only inference that put Adwaita, Deepin and openKylin controls on
+the wrong side. Explicit legacy side choices remain supported. A persisted
+proven fallback can supply its actual side only when theme and mode match;
+stale or unknown-proof records are ignored. This does not add new decoration
+styles or claim that GTK can reproduce rdwm's exact button artwork.
+
+Added regressions iterate every native catalogue style in both modes and check
+mode changes, explicit side preference, and matching/stale fallback records.
+The latest source passes rustfmt/whitespace checks only; compile, test execution
+and native GTK/gsettings dry-run evidence remain pending. Theme capture's old
+macos/classic structural token remains a separate follow-up.
+
+Compilation update: combined icon ownership and decoration-side candidate
+`0d68442` passed `cargo check --locked --offline -j1 --all-targets` with identical
+before/after source fingerprints and no resource interruption. Evidence:
+`/var/tmp/decebal-theme-consistency-source-check/result.json`. New regression
+tests are type-checked but have not yet executed; native toolkit acceptance
+remains pending.
+
+Execution update: all five focused consistency regressions passed at `a557b91`
+with private HOME/XDG, dead buses, one test thread and identical source
+fingerprints. Evidence: `/var/tmp/decebal-theme-consistency-tests/result.json`
+and `check.log`. This executes every catalogue style in both modes, the legacy
+side override, matching/stale fallback handling, icon policy transitions and
+toolkit effective-config ownership. It does not replace native GTK/gsettings
+or visual-fidelity acceptance.
+
+### Native component defaults (source candidate, 2026-11-02)
+
+Windows 11 now selects the Windows Start launcher and native Windows caption
+cells in light/dark modes, with Classic as a capability-checked fallback.
+NextKDE selects Kickoff but retains its documented glass/mac-dock adaptation.
+GNOME Adwaita selects the GNOME app grid and mode-specific Adwaita controls,
+also with a Classic fallback. Windows/NextKDE package versions and minimum shell
+requirements are bumped. The GNOME framework fixture is updated in step with
+the shipped package. This is reuse of existing native renderers, not a claim of
+pixel-identical upstream launchers or a full GNOME Overview.
+
+The Windows legacy-token test keeps its frozen colors and metrics oracle, with
+one explicit expected change for the native Start layout. Native caption/style
+selection has a separate package-resolution contract. The Windows flat-token
+Classic value remains a legacy capture/fallback representation; the modern
+mode-specific style keys control rdwm. Native captures, capability fallback and
+full package tests must pass before deployment. No live theme was applied.
+
+Native-component package validation: all six engine golden tests passed at
+`950c3b0`, including full isolated apply planning through a private offline
+capability CLI. That fixture checks TOML syntax before its no-op check endpoint;
+it is not a real WM semantic validator. Evidence:
+`/var/tmp/decebal-theme-native-components-tests-retry3/result.json`. Earlier
+invalid-metric and missing/incomplete capability-fixture failures are retained
+in their original evidence directories. The shipped GNOME fixture equality and
+new package component integration tests still need execution.
+
+Qualified package integration checkpoint (2026-11-02): at `fc7ff44`,
+`cargo test --locked --offline -j1 --test theme_components -- --test-threads=1`
+compiled the actual checkout in its own target and executed both named tests
+successfully. The tests resolve Windows, NextKDE and GNOME launcher defaults in
+both modes, plus Windows/GNOME desired caption styles, classic fallback and
+right-side toolkit buttons. Evidence:
+`/var/tmp/decebal-theme-component-integration-qualified/result.json` and `check.log`.
+The source fingerprint stayed unchanged. This verifies package resolution, not
+native rendering, upstream replica fidelity or application repainting.
+
+Review-repair checkpoint (2026-11-02), source `ce2769e`: 63 focused library tests
+passed with zero failures in the checkout-owned target, private HOME/XDG and dead
+buses. These cover icon policy, app-icon field readback, CLI custom/automatic
+ownership, theme application, all listed themes across modes, ordered persistence,
+external-edit races and rollback. Required newly named tests were positively
+observed; source fingerprints match. Evidence:
+`/var/tmp/decebal-theme-review-repairs-tests/result.json` and `check.log`.
+The test took 307 seconds including compilation; it was not a hung or restarted
+run. GNOME integration tests, native GTK/Qt propagation and whole-suite/CI remain
+separate acceptance requirements.
+
+Follow-up checkpoint at `fd19298`: all 21 tests passed (5 writer/caption fallback,
+14 GNOME integration, 2 native family component tests). The new native-launcher
+export floor and malformed mode-style fallback tests executed, as did the explicit
+unknown-capability refusal test. The latter leaves target files unchanged; the
+production capability gate was not relaxed. Evidence:
+`/var/tmp/decebal-theme-final-review-integration-retry1/`; source fingerprints match.
+The preceding attempt failed because the new test referenced another module's
+private fixture constant; it was repaired with a self-contained builtin fixture.
+Native GTK/Qt output and full-suite/CI acceptance remain separate.

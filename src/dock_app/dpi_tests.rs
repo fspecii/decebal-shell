@@ -100,10 +100,14 @@ fn the_window_strut_input_and_glass_are_the_logical_ones_times_the_scale_on_ever
 
 #[test]
 fn the_pixels_the_ring_and_the_pointer_agree_at_every_scale_on_every_edge() {
+    // Pixel subtraction must isolate the ring: parallel theme publishers and
+    // wall-clock launch bounces otherwise change unrelated pixels between shots.
+    let theme = crate::theme::builtin::def("macos").unwrap().resolve("macos", true, &crate::theme::model::Selection::default());
+    let _theme = crate::theme::live::thread_theme(theme);
     for edge in EDGES {
         let mut ring_size_at_one = None;
         for s in SCALES {
-            let (mut a, log, _g) = desk("dpi-map", edge, s, &APPS, false);
+            let (mut a, log, _g) = desk("dpi-map", edge, s, &APPS, true);
             let size = settle(&mut a, None);
             let plain = render(&mut a, size);
             assert_eq!((plain.width(), plain.height()), size);
@@ -116,6 +120,7 @@ fn the_pixels_the_ring_and_the_pointer_agree_at_every_scale_on_every_edge() {
                 a.pointer_release(px, py, Button::Left);
                 assert_eq!(log.lock().unwrap().launched.last().map(String::as_str), Some(*app), "{edge:?} {s}: a click at {px},{py} activates item {i}");
             }
+            assert!(!a.inner_mut().dock.bouncing(), "ring measurements must not include launch animation");
             // the panel's rounded plate ends where the glass mask says; outside it nothing is drawn
             let g = a.glass_regions()[0];
             let outside = match edge {

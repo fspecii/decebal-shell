@@ -1307,8 +1307,7 @@ mod tests {
 
     /// A theme sandbox whose package writes decebal.json, dock-settings.json and config.toml, plus their order.
     fn theme_files(name: &str) -> (PathBuf, Source, Paths, Vec<PathBuf>, Vec<String>) {
-        let (d, src, mut paths) = crate::theme::engine::apply::tests::sandbox(name);
-        paths.rdwmctl = "/nonexistent/rdwmctl".into();
+        let (d, src, paths) = crate::theme::engine::apply::tests::sandbox(name);
         let originals = vec!["# mine\n[general]\nborder_px = 2\n".to_string(), "{\"theme\": {\"name\": \"nord\"}, \"future\": 1}\n".to_string(), "{\"appSpacing\": 3}\n".to_string()];
         std::fs::write(&paths.rdwm_config, &originals[0]).unwrap();
         std::fs::write(paths.shell_json(), &originals[1]).unwrap();

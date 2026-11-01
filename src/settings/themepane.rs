@@ -421,9 +421,13 @@ mod tests {
         let text = std::fs::read_to_string(&cfg).unwrap();
         assert!(text.starts_with("# keep me\n"), "{text}");
         assert!(text.contains("focused_bg") && text.contains("[decoration.bar]"));
-        m.apply("l:theme:windows11", CtlVal::Click);
-        let text = std::fs::read_to_string(&cfg).unwrap();
-        assert!(text.contains("style = \"classic\""), "{text}");
+        // Windows 11 names a caption style per mode (with a classic fallback only when the target cannot draw it).
+        for (mode, want) in [("dark", "windows"), ("light", "windows-light")] {
+            m.apply("th:mode", CtlVal::Str(mode.into()));
+            m.apply("l:theme:windows11", CtlVal::Click);
+            let doc = super::super::tomlcfg::Cfg::parse(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
+            assert_eq!(doc.get("decoration", "style"), Some(super::super::tomlcfg::Val::Str(want.into())), "{mode}");
+        }
     }
 
     #[test]

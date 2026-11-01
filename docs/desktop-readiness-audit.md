@@ -1,11 +1,76 @@
 # Desktop readiness audit — current checkpoint
 
-Current checkpoint: 2026-10-31, after the ten-hour 0.3 desktop sprint. Evidence is
-scoped to the workflow tested; this does not establish KDE/GNOME parity or
-physical hardware readiness. Older checkpoints below are retained as history,
-not descriptions of the currently installed binaries.
+Current checkpoint: 2026-11-01. This report separates installed software,
+qualified source and pending release acceptance. It does not establish KDE/GNOME
+parity or physical hardware readiness. Earlier sections are historical and may
+mention limitations since repaired; use the current implementation documents
+linked below for feature coverage.
 
-## Current accepted iteration — 0.3
+## Current installed and pending release
+
+The installed shell is the qualified standard 23-binary `704c657` release in both
+managed user binary directories. The running WM has been preserved; updating its
+source or installed executable does not prove a live backend restart. Existing
+Settings windows and drafts are preserved during shell handoffs.
+
+The next shell candidate is `9d663b4`, **not installed** at this checkpoint:
+
+- Full integrated library gate: **2,402 passed, 0 failed, 23 ignored**.
+- All 24 optimized executables (23 runtime binaries plus `examples/launchapp`)
+  built and were sealed after a successful cached retry. The original build's
+  I/O-guard failure is retained, not counted as a success.
+- Matching data bundle: **44 themes, 215 files**, with package-origin, integrity,
+  user-override precedence and standard-XDG discovery checks. These counts do not
+  imply full upstream visual fidelity.
+- Seven optimized native phases passed: empty/reloaded Control Center, icon
+  integration, one-click gallery opening, preview stress, XSETTINGS ownership,
+  and GTK integration. GTK recorded **228/228 checks** and four live recolouring
+  outcomes in the same GTK 3/GTK 4 processes.
+- Launcher, rapid-toggle, dock lifecycle, UKUI matrix, Wayland popup and widget
+  recovery optimized checks remain pending. Interrupted runs are not passes.
+  The launcher fixture's missing private work directory was corrected before
+  retry; subsequent testing was held after the I/O guard interrupted it.
+- Widget-creator native coverage is also pending. A reviewed fixture has crop
+  and cleanup repairs plus 16 passing helper tests; a resource-interrupted run
+  did not reach creation and is not acceptance.
+
+Local evidence is recorded in
+`/var/tmp/decebal-9d-native-qualification-checkpoint.json`, the individual
+`/var/tmp/decebal-9d-optimized-acceptance*-control/` directories, and the sealed
+`9d663b4…-retry2` artifact with its matching `9d663b4….assets` bundle. These paths
+are machine-local evidence, not repository-distributed test results.
+
+## Current product gaps
+
+Native Wayland widgets and compact HUD/dashboard surfaces are implemented; they
+are not X11-only. Development-binary private compositor evidence exists, while
+optimized and physical mixed-DPI/hotplug acceptance remains incomplete. See
+[widget readiness](widgets-host-session-readiness.md) and
+[compact popups](wayland-compact-popups.md). Native notification frontend work is
+separate from capture/portal integration; neither should be inferred from the
+widget implementation.
+
+AT-SPI2 is implemented and Settings has a semantic adapter. The shell as a whole
+is not yet accessible: launcher/bar/dock/notification adapters and real Orca
+workflow acceptance remain work. See [accessibility](accessibility.md). Any
+older “no AT-SPI” statement below is historical.
+
+Explorer/Finder file-manager profiles provide appearance and integration around
+existing file operations. They are not replacement interaction models, Finder
+column view or an Explorer ribbon. See [file-manager profiles](file-manager-profiles.md).
+The separate optional [Decebal Files prototype](../extras/decfiles/README.md)
+already implements details/columns, address navigation, tabs, search and basic
+file operations; it is not installed or a production default. File opening,
+Open With, multi-selection, mounts, undo/restore and broader acceptance remain
+incomplete. Do not count those prototype workflows as absent, or count them as
+qualified default-shell behavior.
+
+The next product work therefore includes complete Wayland session integration,
+launcher and shell accessibility, familiar file workflows, authentic theme
+fidelity, and desktop-wide responsiveness qualification. Passing one workflow or
+headless compositor test never substitutes for these broader requirements.
+
+## Earlier accepted iteration — 0.3
 
 The [sprint handoff](desktop-sprint-2026-10-31.md) records the exact artifacts,
 original failures, native qualification and remaining requirements. The standard

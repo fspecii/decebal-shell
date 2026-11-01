@@ -19,6 +19,13 @@ import tempfile
 HERE = Path(__file__).resolve().parents[2]
 
 
+def control_center_card(text):
+    """Swaps only `[control_center] style = "gnome"`; the `[launcher]` style of the same name is a different, valid component."""
+    swapped = re.sub(r'(?ms)(^\[control_center\]\n(?:(?!^\[).*\n)*?)style = "gnome"', r'\1style = "card"', text, count=1)
+    assert swapped != text, "no [control_center] style = \"gnome\" to replace"
+    return swapped
+
+
 def main():
     ctl = Path(sys.argv[1]).resolve()
     themes = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else HERE / "themes"
@@ -29,7 +36,7 @@ def main():
         env = {"PATH": "/usr/bin:/bin", "HOME": str(home), "XDG_CONFIG_HOME": str(home), "XDG_CACHE_HOME": str(home), "DECEBAL_CONFIG": str(home)}
         for proposed in sorted((HERE / "tests/fixtures/gnome-theme-ports/framework-0.3").glob("*.theme.toml")):
             ident = proposed.name.removesuffix(".theme.toml")
-            for variant, rewrite in (("as written", None), ("style=card", lambda t: t.replace('style = "gnome"', 'style = "card"'))):
+            for variant, rewrite in (("as written", None), ("style=card", control_center_card)):
                 pkg = Path(tmp) / variant.replace(" ", "_").replace("=", "_") / ident
                 shutil.copytree(themes / ident, pkg)
                 text = proposed.read_text()

@@ -1,11 +1,11 @@
 format = 1
 id = "windows11"
 name = "Windows 11"
-version = "1.0.0"
+version = "1.1.0"
 author = "decebal"
 license = "MIT"
-description = "Fluent look: squarer corners, Mica greys, classic caption buttons."
-min_shell_version = "0.1.0"
+description = "Fluent look: squarer corners, Mica greys, native caption cells and Start launcher."
+min_shell_version = "0.3.0"
 tags = ["windows", "fluent"]
 
 [metrics]
@@ -20,8 +20,15 @@ outline = 0.1
 [font]
 preset = "segoe"
 
+[launcher]
+style = "windows"
+
 [decoration]
+# Mode-specific keys take precedence; the base is the legacy/fallback representation.
 style = "classic"
+style_light = "windows-light"
+style_dark = "windows"
+fallback_style = "classic"
 height = 32
 
 [dock]

@@ -698,6 +698,12 @@ impl Def {
                 .and_then(serde_json::Value::as_str)
                 .filter(|s| matches!(*s, "left" | "right"))
                 .map(|s| s == "right")
+                .or_else(|| {
+                    let decoration = self.extra.get("decoration")?;
+                    let style_key = |key| decoration.get(key).and_then(serde_json::Value::as_str).filter(|style| super::engine::decoration_compat::valid_id(style));
+                    let style = style_key(if dark { "style_dark" } else { "style_light" }).or_else(|| style_key("style"))?;
+                    crate::settings::decorations::buttons_right(style)
+                })
                 .unwrap_or_else(|| matches!(get("titlebar_style"),Some(V::S(s)) if s=="classic")),
             titlebar_style: text_of("titlebar_style").unwrap_or_else(|| "macos".into()),
             titlebar_height: num("titlebar_height", 28.0).round() as i64,
@@ -1246,5 +1252,44 @@ mod tests {
         assert_eq!(Selection::from_json(&serde_json::json!(5)), Selection::default());
         let junk = Selection::from_json(&serde_json::json!({"name": "", "mode": "purple", "accent": "nope", "opacity": 9}));
         assert_eq!((junk.name.as_str(), junk.mode, junk.accent, junk.opacity), ("macos", Mode::Dark, None, Some(1.0)));
+    }
+}
+
+#[cfg(test)]
+mod button_side_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_mode_style_uses_the_valid_base_button_side_like_the_wm_contract() {
+        for invalid in [serde_json::json!(42), serde_json::json!("bad style")] {
+            let mut def = crate::theme::builtin::def("macos").unwrap();
+            def.extra.insert("decoration".into(), serde_json::json!({"style":"classic","style_dark":invalid}));
+            assert!(def.resolve("mini", true, &Selection::default()).window_buttons_right);
+            assert_eq!(crate::theme::engine::decoration_compat::wanted(&def.extra, true).unwrap().desired, "classic");
+        }
+    }
+
+    #[test]
+    fn every_native_style_drives_toolkit_button_side_in_both_modes() {
+        let catalogue: serde_json::Value = serde_json::from_str(include_str!("../settings/decoration-catalogue.json")).unwrap();
+        for row in catalogue.as_array().unwrap() {
+            let style = row["id"].as_str().unwrap();
+            let expected = row["side"] == "Right";
+            for dark in [false, true] {
+                let mut def = Def::parse("name = 'side test'\n").unwrap();
+                def.extra.insert("decoration".into(), serde_json::json!({"style_light":style,"style_dark":style}));
+                assert_eq!(def.resolve("fixture", dark, &Selection::default()).window_buttons_right, expected, "{style}, dark={dark}");
+            }
+        }
+    }
+
+    #[test]
+    fn mode_specific_side_and_explicit_legacy_preference_are_respected() {
+        let mut def = Def::parse("name = 'side test'\n").unwrap();
+        def.extra.insert("decoration".into(), serde_json::json!({"style_light":"macos","style_dark":"adwaita"}));
+        assert!(!def.resolve("fixture", false, &Selection::default()).window_buttons_right);
+        assert!(def.resolve("fixture", true, &Selection::default()).window_buttons_right);
+        def.extra.get_mut("decoration").unwrap()["buttons"] = serde_json::json!("left");
+        assert!(!def.resolve("fixture", true, &Selection::default()).window_buttons_right);
     }
 }

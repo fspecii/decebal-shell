@@ -25,7 +25,7 @@ Unaffiliated with the GNOME Project or Catppuccin. This work owns only the new `
 
 **Not complete, and not claimed to be.** The native GNOME quick-settings Control Center look exists (`control_center.style = "gnome"`, below) and both packages use it, behind the
 `min_shell_version = "0.3.0"` floor. What exists: two validated packages, pinned research, native previews and private native captures.
-What gates completion (all outside this change): the universal four-edge panel/applet schema and renderer, an Overview/launcher style and
+What gates completion (all outside this change): the universal four-edge panel/applet schema and renderer, a fully replicated Overview transition and
 GNOME-shaped quick settings (blockers 1, 2, 3, 4, 8, 9, 10), rdwm decoration captures, the parent's wallpaper verification and merge, and the
 native-fidelity review. Until then these are honest partial ports.
 

@@ -741,18 +741,33 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
     let (t, problem) = src.build(&sel, system_dark());
     match problem {
         Some(p) => Err(p),
-        None => Ok((Palette::from_theme(&t), sel)),
+        None => {
+            let mut palette = Palette::from_theme(&t);
+            recorded_button_side(&mut palette, &crate::settings::io::json_load(&src.shell_json), &t.id, t.dark);
+            Ok((palette, sel))
+        }
     }
 }
 
-/// The system configuration as the targets see it: an explicit `system.iconTheme` wins, otherwise the theme's shell icon pack
-/// (`icons.theme`) is carried to apps too.
+/// A proven fallback belongs only to its recorded theme and mode; stale records cannot move app buttons.
+fn recorded_button_side(palette: &mut Palette, doc: &Value, theme: &str, dark: bool) {
+    let record = &doc["decoration_compat"];
+    if record["theme"].as_str() != Some(theme) || record["mode"].as_str() != Some(if dark { "dark" } else { "light" }) || !matches!(record["proof"].as_str(), Some("running" | "offline")) {
+        return;
+    }
+    if let Some(right) = record["applied"].as_str().and_then(crate::settings::decorations::buttons_right) {
+        palette.classic_buttons = right;
+    }
+}
+
+/// The policy-owned icon slot drives shell and toolkit apps together. Preserve a legacy app-only
+/// override only until the user or a theme has taken ownership through the shared policy.
 fn effective_config(shell_json: &Path) -> Config {
     let mut cfg = Config::load(shell_json);
-    if cfg.icon_theme.is_none() {
-        // "auto" follows the desktop's own setting: no named theme to publish.
-        cfg.icon_theme =
-            crate::settings::io::json_load(shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("auto")).map(String::from);
+    let doc = crate::settings::io::json_load(shell_json);
+    let owned = doc.get("asset_packs").and_then(|a| a.get("icons")).is_some();
+    if owned || cfg.icon_theme.is_none() {
+        cfg.icon_theme = crate::desktop_assets::policy::current(&doc, crate::desktop_assets::Provides::Icons);
     }
     cfg
 }
@@ -1153,7 +1168,7 @@ pub enum Publication {
 /// `[Appearance] icon_theme`.
 ///
 /// * Explicit opt-outs win: `system.enabled = false` (unset means on), or the `gtk` and `qt` targets switched off, publish nothing.
-///   An explicit `system.iconTheme` keeps winning over the theme's `icons.theme`. A theme that is not installed is not published.
+///   Policy-owned `icons.theme` drives app icons; an untouched legacy app-only override is honored until migrated as a custom choice. A theme that is not installed is not published.
 /// * Ordering: see the request ownership protocol above. A pending theme apply keeps its full intent; the worker publishes the
 ///   selection of exactly `shell_json` current when it claims its ticket.
 pub fn publish_assets(shell_json: &Path) -> Publication {
@@ -1356,6 +1371,35 @@ pub mod testutil {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn toolkit_buttons_follow_only_the_matching_proven_fallback() {
+        let mut p = palette(false);
+        p.classic_buttons = true;
+        let mut record = serde_json::json!({"decoration_compat":{"theme":"deepin","mode":"light","proof":"running","applied":"macos"}});
+        super::recorded_button_side(&mut p, &record, "deepin", false);
+        assert!(!p.classic_buttons);
+        p.classic_buttons = true;
+        super::recorded_button_side(&mut p, &record, "other", false);
+        assert!(p.classic_buttons);
+        super::recorded_button_side(&mut p, &record, "deepin", true);
+        assert!(p.classic_buttons);
+        record["decoration_compat"]["proof"] = serde_json::json!("unknown");
+        super::recorded_button_side(&mut p, &record, "deepin", false);
+        assert!(p.classic_buttons);
+    }
+
+    #[test]
+    fn policy_owned_icons_reach_apps_including_an_explicit_automatic_choice() {
+        let dir = super::testutil::tmp("icon-slot-authority");
+        let path = dir.as_ref().join("decebal.json");
+        for (slot, mode, expected) in [("Bloom", "follow", Some("Bloom")), ("Custom", "custom", Some("Custom")), ("auto", "custom", None)] {
+            let doc = serde_json::json!({"system":{"iconTheme":"stale"}, "icons":{"theme":slot}, "asset_packs":{"icons":{"mode":mode}}});
+            std::fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
+            assert_eq!(super::effective_config(&path).icon_theme.as_deref(), expected);
+        }
+        std::fs::write(&path, br#"{"system":{"iconTheme":"Legacy"}}"#).unwrap();
+        assert_eq!(super::effective_config(&path).icon_theme.as_deref(), Some("Legacy"));
+    }
     use super::testutil::*;
     use super::*;
 

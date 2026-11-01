@@ -51,6 +51,48 @@ def cargo_args(command):
             raise Refused('desktop jobs permit only cargo -j1; omit --jobs or use 1')
 
 
+def source_target(command, env, cache, cwd=None):
+    """Scope direct Cargo jobs even when a caller supplies a shared target base."""
+    cwd = Path.cwd() if cwd is None else Path(cwd)
+    source = cwd.resolve()
+    command = list(command)
+    if Path(command[0]).name != 'cargo':
+        key = hashlib.sha256(os.fsencode(source)).hexdigest()[:16]
+        env.setdefault('CARGO_TARGET_DIR', str(cache / 'decebal-targets' / key))
+        return command
+    args_end = command.index('--') if '--' in command else len(command)
+    base = Path(env.get('CARGO_TARGET_DIR', str(cache / 'decebal-targets')))
+    targets = []
+    i = 1
+    while i < args_end:
+        arg = command[i]
+        if arg in ('--manifest-path', '--target-dir'):
+            if i + 1 >= args_end:
+                raise Refused(f'{arg} requires a value')
+            value = command[i + 1]
+            if arg == '--manifest-path':
+                source = (cwd / value).resolve().parent
+            else:
+                base = Path(value)
+                targets.append((i + 1, False))
+            i += 2
+            continue
+        if arg.startswith('--manifest-path='):
+            source = (cwd / arg.split('=', 1)[1]).resolve().parent
+        elif arg.startswith('--target-dir='):
+            base = Path(arg.split('=', 1)[1])
+            targets.append((i, True))
+        i += 1
+    # A manifest in another checkout must never inherit this checkout's root
+    # product fingerprints. Dependency-only seeds may be placed in this leaf.
+    key = hashlib.sha256(os.fsencode(source)).hexdigest()[:16]
+    target = str((cwd / base).resolve() / 'desktop-sources' / key)
+    env['CARGO_TARGET_DIR'] = target
+    for index, joined in targets:
+        command[index] = '--target-dir=' + target if joined else target
+    return command
+
+
 def acquire(slots, deadline):
     """Take both old slots without holding one while waiting for the other."""
     while True:
@@ -133,7 +175,7 @@ class Pressure:
         return None
 
 
-def run(command, slots, timeout, max_io_stall=10):
+def run(command, slots, timeout, max_io_stall=10, quiet_seconds=0):
     ionice = shutil.which('ionice')
     if not ionice:
         raise Refused('ionice is required; refusing to run without idle I/O priority')
@@ -141,8 +183,7 @@ def run(command, slots, timeout, max_io_stall=10):
     env.setdefault('CARGO_PROFILE_DEV_DEBUG', '0')
     env.setdefault('CARGO_PROFILE_TEST_DEBUG', '0')
     cache = Path(env.get('XDG_CACHE_HOME', str(Path.home() / '.cache')))
-    key = hashlib.sha256(os.fsencode(Path.cwd())).hexdigest()[:12]
-    env.setdefault('CARGO_TARGET_DIR', str(cache / 'decebal-targets' / key))
+    command = source_target(command, env, cache)
     pressure = Pressure(max_io_stall)
     cancel = []
     old = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
@@ -150,6 +191,27 @@ def run(command, slots, timeout, max_io_stall=10):
         signal.signal(sig, lambda signum, frame: cancel.append(signum))
     child = None
     try:
+        # Measure before creating any native fixture or detached compositor.
+        # Refuse rather than continuously retrying on a busy desktop.
+        admission_deadline = time.monotonic() + quiet_seconds
+        while time.monotonic() < admission_deadline:
+            if cancel:
+                raise Refused(f'interrupted before command start by signal {cancel[0]}')
+            if (slots / 'paused').exists():
+                raise Refused('developer jobs paused before command start')
+            pressure_reason = pressure.check()
+            if pressure_reason:
+                pause_jobs(slots)
+                raise Refused(f'{pressure_reason}; admission refused, no command started')
+            time.sleep(min(.05, max(0, admission_deadline - time.monotonic())))
+        if quiet_seconds:
+            pressure_reason = pressure.check()
+            if pressure_reason:
+                pause_jobs(slots)
+                raise Refused(f'{pressure_reason}; admission refused, no command started')
+            pressure = Pressure(max_io_stall)
+        if cancel or (slots / 'paused').exists():
+            raise Refused('developer jobs paused or interrupted before command start')
         child = subprocess.Popen([ionice, '-c', '3', '--', *command], env=env,
                                  stdin=subprocess.DEVNULL, close_fds=True, start_new_session=True,
                                  preexec_fn=lambda: os.setpriority(os.PRIO_PROCESS, 0, 19))
@@ -173,7 +235,10 @@ def run(command, slots, timeout, max_io_stall=10):
             time.sleep(0.05)
         signal_group(child, signal.SIGTERM)
         if reason:
-            grace = time.monotonic() + 2
+            # Native fixtures may need to stop a detached private compositor,
+            # flush their evidence and reap owned helpers. Keep both slots
+            # held during bounded cleanup instead of killing them after 2s.
+            grace = time.monotonic() + 10
             while not exited(child) and time.monotonic() < grace:
                 time.sleep(0.05)
         # Clear remaining non-detached children before releasing either slot.
@@ -197,6 +262,7 @@ def main():
     parser.add_argument('--queue-timeout', type=float, default=60)
     parser.add_argument('--timeout', type=float, default=1800)
     parser.add_argument('--max-io-stall', type=float, default=10, help='pause jobs above this full I/O stall percentage over a measured interval of at least one second (default: 10)')
+    parser.add_argument('--quiet-seconds', type=float, default=0, help='measure I/O before starting; refuse and pause if over budget (0 disables, otherwise 1..30 seconds)')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--pause', action='store_true')
     modes.add_argument('--resume', action='store_true')
@@ -216,9 +282,11 @@ def main():
             raise Refused('provide a command and positive execution deadline')
         if not math.isfinite(args.max_io_stall) or not 0 < args.max_io_stall <= 100:
             raise Refused('I/O stall budget must be finite and in (0, 100]')
+        if not math.isfinite(args.quiet_seconds) or (args.quiet_seconds != 0 and not 1 <= args.quiet_seconds <= 30):
+            raise Refused('quiet observation must be 0 or between 1 and 30 seconds')
         cargo_args(command)
         held = acquire(slots, time.monotonic() + args.queue_timeout)
-        return run(command, slots, args.timeout, args.max_io_stall)
+        return run(command, slots, args.timeout, args.max_io_stall, args.quiet_seconds)
     except (Refused, OSError) as error:
         print(f'desktop-job: {error}', file=sys.stderr)
         return 75
