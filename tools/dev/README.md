@@ -96,3 +96,23 @@ may describe the same I/O and must not be summed. Counter resets/new devices are
 skipped. Active time on modern parallel devices is not a saturation metric or a
 disk-health test. Field definitions follow the
 [Linux kernel I/O statistics documentation](https://docs.kernel.org/admin-guide/iostats.html).
+
+## Read-only shell health
+
+`python3 tools/dev/shell_health.py --receipt /path/to/runtime.json` checks a
+receipt's `components` list (`name`, `pid`, absolute `target`, and ideally
+`starttime` from Linux stat field 22 plus `sha256`). It never signals or restarts
+processes. Missing processes, zombies, reused PIDs, changed binaries, foreign
+owners, and unreadable identities remain distinct. An old receipt without a
+start time is explicitly inconclusive even when the executable matches.
+
+For an intentionally absent dock, add `--dock-probe /absolute/path/decdock
+--dock-sha256 <verified-digest>` in the actual desktop session environment.
+Only the hash-checked binary's read-only `--wanted` query runs. A disabled dock
+is then reported as configured off rather than failed. No probe is run by
+default. Exit 0 means all supplied components have verified running identities
+or are a confirmed disabled dock, 1 means incomplete health, and 2 means an
+invalid input or failed probe. This is process identity evidence, not proof of
+visual correctness, event-loop responsiveness, or a complete component inventory.
+
+Run the isolated process-identity tests with `python3 -I tests/shell-health.py`.
