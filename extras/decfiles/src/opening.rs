@@ -145,6 +145,15 @@ pub fn default_app(content_type: &str, cancel: &gio::Cancellable, done: impl FnO
 /// This never records the app as a default or "last used" handler.
 pub fn launch_with<P: IsA<gio::AppLaunchContext>>(app: &gio::AppInfo, path: &Path, context: Option<&P>, cancel: &gio::Cancellable, done: impl FnOnce(Result<(), glib::Error>) + 'static) {
     let uri = gio::File::for_path(path).uri();
+    // Fixture-only: keep the real dispatch outcome in flight so overlapping requests can be tested.
+    // Production builds never read this variable or delay completion.
+    #[cfg(feature = "fixture-delay")]
+    if let Some(delay) = std::env::var("DECFILES_FIXTURE_LAUNCH_DELAY_MS").ok().and_then(|value| value.parse::<u64>().ok()).filter(|delay| *delay > 0) {
+        app.launch_uris_async(&[uri.as_str()], context, Some(cancel), move |result| {
+            glib::timeout_add_local_once(std::time::Duration::from_millis(delay.min(10_000)), move || done(result));
+        });
+        return;
+    }
     app.launch_uris_async(&[uri.as_str()], context, Some(cancel), done);
 }
 

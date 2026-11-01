@@ -18,6 +18,7 @@ suites=[('default','native.py','DECFILES_BIN','DECFILES_EVIDENCE','navigation'),
  ('fixture-delay','paste-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_PASTE_RACES_EVIDENCE','paste-races'),
  ('fixture-delay','search-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_SEARCH_RACES_EVIDENCE','search-races'),
  ('fixture-delay','open-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_OPEN_RACES_EVIDENCE','open-races'),
+ ('fixture-delay','open-dispatch-native.py','DECFILES_FIXTURE_BIN','DECFILES_OPEN_DISPATCH_EVIDENCE','open-dispatch'),
  ('fixture-delay','theme-races-native.py','DECFILES_FIXTURE_BIN','DECFILES_THEME_RACES_EVIDENCE','theme-races')]
 sources={str(p.relative_to(source_root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(source_root.rglob('*')) if p.is_file() and 'target' not in p.parts and (p.suffix=='.rs' or p.name in ('Cargo.toml','Cargo.lock'))}
 summary={}

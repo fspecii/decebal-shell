@@ -762,3 +762,11 @@ The full standalone-module attempt is retained as a failed harness run:
 its cached GIO artifact lacks the async lookup feature. Async probe/launch,
 GTK chooser, held-key and view-rebuild behavior are excluded from the focused
 execution and still require the full feature-correct Cargo/native gates.
+
+The draft `open-dispatch-native.py` is now registered in `gates.py`. Its
+fixture-delay-only callback hold preserves real fake-opener dispatch while
+making overlapping requests observable. It requires both A/B callbacks to be
+published, B to survive A's completion, and repeated A to remain deduplicated.
+This new fixture has passed Python syntax checking only; its feature build and
+native execution remain unrun. Production builds ignore the callback-delay
+variable entirely.
