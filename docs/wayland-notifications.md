@@ -17,6 +17,7 @@ is a `DISPLAY`). With no usable display `decnotify` exits 0 without requesting t
 | Queue (max 5 visible), replacement, retained deadlines, hover pause + grace, expiry/close reasons, middle = dismiss all, resident actions, stack layout | `notify/view.rs` (`Stack`) | via `Host` | via `Host` |
 | History panel: layout, Tab / Shift+Tab / Enter / Space / Delete / Escape, wheel pan + row scroll, hover, Clear / DND / Retry, painting | `notify/history.rs` | same code | same code |
 | Scales, input regions, key repeat, wheel accumulation, bar-inset policy | `notify/geom.rs` | n/a | pure, unit tested in every build |
+| Bounded, coalesced frame presentation (buffers, frame callbacks, budgets) | `notify/present.rs` | n/a | pure state machine, unit tested in every build |
 | Windows, pixels, native input | `notify/ui.rs` (x11rb) / `notify/wl.rs` (SCTK) | override-redirect windows | wlr-layer-shell surfaces |
 
 The bus loop (`notify::serve`) is one generic function over the `Frontend` trait. Each front end sleeps in one
@@ -49,6 +50,36 @@ thread, and no second connection.
   another output (or parked until one exists), the history panel is closed.
 * **Keyboard repeat** is done client side from `wl_keyboard.repeat_info` (the panel only).
 
+## Presentation (Wayland): bounded and coalesced
+
+Painting never talks to the compositor. `Host::paint` only stores the newest `Pixmap` of a surface (an older unshown
+one is replaced and counted as *coalesced*), `Host::flush` does nothing, and `WlHost::present` commits once per
+event-loop turn, right before the loop sleeps and again after each dispatch (so a callback or release that just
+arrived is acted on at once). A burst of input is therefore one commit per surface, not one per event.
+
+Per banner or panel surface (`notify/present.rs`):
+
+* at most **3 shm buffers**, *counting buffers of an older size or scale that the compositor has not released*. A buffer
+  is reused only when released; a size or scale change that finds all three held waits for a release instead of
+  allocating; a released buffer of another size is destroyed at once (`BufferSet::reap`). SCTK's `SlotPool` retains an
+  active buffer whose handle is dropped, so no active buffer is ever dropped: the handles are kept in the set.
+* the frame is attached together with its size, scale/viewport, margins and **input region**, and asks for a **frame
+  callback**; the next frame waits for it. The fallback is `FRAME_STALL` (1 s): after that a frame goes out anyway, never
+  more than `MAX_CALLBACKS` (2) callbacks are outstanding, and past that commits proceed without asking for more.
+* when all buffers are busy the retry is scheduled (16 ms, then every 250 ms after a second) and fed to the `poll`
+  timeout (`WlHost::next_wake`, never below 1 ms); releases and callbacks wake the loop sooner. Nothing spins.
+* the input region and margins stay those of the **last committed frame** until a new frame is attached; a margin-only
+  change (a banner above closed) is sent without a repaint when size and scale are unchanged.
+* budgets: 16 MiB per buffer, 32 MiB per surface, 96 MiB for the daemon, **including** the *graveyard* (buffers of
+  destroyed or parked surfaces the compositor still holds, dropped the moment they are released). A refused allocation
+  is logged once per episode (`log_warn`) and counted; the surface keeps its last frame. A failed shm allocation is
+  logged and retried on the schedule above. Normal cards are card-sized (about 0.1-4 MiB); nothing is output-sized.
+  A catcher keeps its single transparent buffer (1x1 with a viewport) and is not repainted.
+* when no buffer is left anywhere, a pool that grew past 1 MiB is replaced by a small one.
+
+`DECNOTIFY_DEBUG_WAYLAND=FILE` writes the counters (per surface and totals: buffers and bytes held, created/reused,
+commits, coalesced, busy, stale, refused, callbacks requested/done, maxima, graveyard, pool size, limits) for the fixture.
+
 ## Environment
 
 | Variable | Effect |
@@ -57,6 +88,7 @@ thread, and no second connection.
 | `DECNOTIFY_OUTPUT=NAME` | Wayland: always use this output |
 | `DECNOTIFY_WAYLAND_INSETS=theme` | Wayland: add the theme's bar insets to the margins |
 | `DECNOTIFY_DEBUG_BANNERS=FILE`, `DECNOTIFY_DEBUG_HISTORY=FILE` | write geometry/state JSON (ids, rects, deadlines, scale); no notification text for banners |
+| `DECNOTIFY_DEBUG_WAYLAND=FILE` | Wayland: write the presentation counters (above) |
 
 ## Behaviour that must not change (and where it is held)
 
@@ -71,6 +103,9 @@ replay an action. Muted, transient, critical, DND and sound decisions are in `Da
 reflow, input outline, placement origin. `history.rs`: tab order and wrap, Escape / Delete / Enter / Space, row removal,
 wheel pan then scroll, hover, relayout bounds. `geom.rs`: fit/logical idempotence at integer and fractional scales,
 inset policy, margins, input-region conversion, transparent catcher plan, wheel accumulation, key repeat, output pick.
+`present.rs`: latest-frame-only coalescing, frame-callback wait and the stall fallback, the callback bound, delayed
+releases never passing 3 buffers, busy retry back-off (no zero-length sleeps), size and scale churn staying bounded with
+old-size buffers counted, stale frames dropped, oversize and budget refusals, reuse only of released same-size buffers.
 `tests/wayland-notification-fixture.py`: parsers of the native fixture.
 
 ## Native fixture (draft, not run)
@@ -82,11 +117,21 @@ deletion. Phases: `contract` (layer/anchor/zone/keyboard/empty region/no tiled w
 and takes nothing), `queue`, `actions` (click without losing the sink's focus), `history` (Escape, same-output and
 other-output outside clicks, keyboard hand-back, no action replay), `persistence` (unwritable state directory, error
 card, Retry click), `dnd` (and a recording `canberra-gtk-play`), `themes`, `scales` (2, 1, 1.5 and an output added),
-`pinned`.
+`burst` (600 pointer motions in one IPC call and 150 Tab presses: far fewer commits, buffers and callbacks within
+the bounds on the wire and in the daemon's counters), `churn` (batched scale changes with banners and the panel up,
+then everything closed: no surfaces, no held buffers, small pool, bounded RSS growth), `pinned`.
 
 ## Known limits (honest list)
 
 * Nothing has been built or run. Compile errors, SCTK API mismatches and fixture mistakes are likely and expected.
+  This includes the presentation rework: the bounds are proven only by the pure model's unit tests, not on a compositor.
+* The coalescing relies on one `present` per loop turn; the loop wakes for input, bus traffic, the theme watcher, key
+  repeat and the deferred-frame deadline only, so a frame can wait up to one frame callback (about one display
+  refresh, at most 1 s when callbacks are lost) behind the previous one.
+* The whole frame is copied into the buffer (no damage tracking) and the full surface is damaged: cheap for cards,
+  but the largest history panel at 2x is about 3.7 MiB per commit.
+* Compositors that never send frame callbacks to an occluded or dpms-off output limit a surface to one commit per
+  second there (and two outstanding callbacks).
 * `Frontend::pump` re-evaluates the output scale and size on every loop turn; no dedicated resize event is used.
 * The first banner is laid out for a guessed output (the first one, or `DECNOTIFY_OUTPUT`) and re-laid out when the
   compositor reports where it put the surface; a one-frame mis-scaled first buffer is possible on a mixed-scale layout.

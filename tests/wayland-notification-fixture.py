@@ -108,6 +108,71 @@ class Scales(unittest.TestCase):
         self.assertTrue(failures)
 
 
+def buffers(spec):
+    """Trace lines: create+attach for each (buffer id, surface) in `spec`; negative ids destroy that buffer."""
+    lines = []
+    for n, item in enumerate(spec):
+        if item < 0:
+            lines.append(f"[{n}.0][rs] -> wl_buffer@{-item}.destroy()")
+        else:
+            lines.append(f"[{n}.0][rs] -> wl_shm_pool@23.create_buffer(wl_buffer@{item}, 0, 344, 100, 1376, 0)")
+            lines.append(f"[{n}.1][rs] -> wl_surface@18.attach(wl_buffer@{item}, 0, 0)")
+    return "\n".join(lines) + "\n"
+
+
+def callbacks(spec):
+    """Trace lines: a positive id requests a frame callback on surface 18, a negative one delivers its done event."""
+    lines = []
+    for n, item in enumerate(spec):
+        if item > 0:
+            lines.append(f"[{n}.0][rs] -> wl_surface@18.frame(wl_callback@{item})")
+        else:
+            lines.append(f"[{n}.0][rs] <- wl_callback@{-item}.done, (1234)")
+    return "\n".join(lines) + "\n"
+
+
+PRESENT = {
+    "totals": {"max_buffers": 3, "max_callbacks": 2},
+    "limits": {"buffers": 3, "callbacks": 2, "surface_bytes": 33554432, "total_bytes": 100663296},
+    "total_bytes": 200000,
+    "surfaces": [{"id": 1, "buffers": 3, "bytes": 200000}],
+}
+
+
+class PresentationBounds(unittest.TestCase):
+    def test_buffers_alive_at_once_are_counted_per_surface_including_held_ones(self):
+        peaks, created = FIXTURE.buffer_peaks(buffers([31, 32, 33, -31, 34]))
+        self.assertEqual(peaks, {18: 3})
+        self.assertEqual(created, 4)
+        peaks, _ = FIXTURE.buffer_peaks(buffers([31, 32, 33, 34]))
+        self.assertEqual(peaks, {18: 4})
+
+    def test_a_recycled_protocol_id_is_a_new_buffer(self):
+        peaks, created = FIXTURE.buffer_peaks(buffers([31, 32, 33, -31, 31, 31]))
+        self.assertEqual((peaks, created), ({18: 3}, 5))
+
+    def test_callbacks_outstanding_are_counted_and_released_by_done(self):
+        peaks, requested = FIXTURE.callback_peaks(callbacks([40, 41, -40, 42, -41]))
+        self.assertEqual((peaks, requested), ({18: 2}, 3))
+        peaks, _ = FIXTURE.callback_peaks(callbacks([40, 41, 42]))
+        self.assertEqual(peaks, {18: 3})
+
+    def test_bounds_fail_on_the_wire_and_in_the_daemons_own_counters(self):
+        failures = []
+        FIXTURE.check_presentation_bounds(buffers([31, 32, 33]) + callbacks([40, 41]), PRESENT, failures, "t")
+        self.assertEqual(failures, [])
+        failures = []
+        FIXTURE.check_presentation_bounds(buffers([31, 32, 33, 34]), None, failures, "t")
+        self.assertTrue(any("4 shm buffers" in f for f in failures), failures)
+        failures = []
+        FIXTURE.check_presentation_bounds(callbacks([40, 41, 42]), None, failures, "t")
+        self.assertTrue(any("3 frame callbacks" in f for f in failures), failures)
+        failures = []
+        bad = dict(PRESENT, totals={"max_buffers": 4, "max_callbacks": 2}, total_bytes=10**9)
+        FIXTURE.check_presentation_bounds("", bad, failures, "t")
+        self.assertTrue(any("past its own limits" in f for f in failures) and any("budget" in f for f in failures), failures)
+
+
 class Signals(unittest.TestCase):
     def test_dbus_monitor_text_is_parsed(self):
         signals = FIXTURE.parse_signals(SIGNALS)

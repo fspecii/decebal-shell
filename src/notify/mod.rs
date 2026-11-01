@@ -9,6 +9,7 @@
 pub mod geom;
 pub mod history;
 pub mod model;
+pub mod present;
 pub mod sound;
 #[cfg(feature = "x11")]
 pub mod ui;

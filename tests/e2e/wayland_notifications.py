@@ -9,7 +9,7 @@ by dbus-monitor on the private bus, and keystrokes/clicks seen by a native foot 
 peer credentials before any control command is sent to them; cleanup uses pidfds.
 
 usage: wayland_notifications.py --bin <immutable decnotify> --out <NEW short dir> [--phases a,b,...] [--keep]
-phases: contract bus queue actions history persistence dnd themes scales pinned
+phases: contract bus queue actions history persistence dnd themes scales burst churn pinned
 Needs: sway swaymsg dbus-daemon dbus-monitor busctl foot wtype. The evidence directory must be short (<= 60 bytes):
 the private sockets live under it and Unix socket paths are limited to 108 bytes.
 """
@@ -32,7 +32,9 @@ POPUP = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(POPUP)
 wait_for, requests, socket_owned, rescue_tagged, FORCED = POPUP.wait_for, POPUP.requests, POPUP.socket_owned, POPUP.rescue_tagged, POPUP.FORCED
 
-ALL_PHASES = ["contract", "bus", "queue", "actions", "history", "persistence", "dnd", "themes", "scales", "pinned"]
+ALL_PHASES = ["contract", "bus", "queue", "actions", "history", "persistence", "dnd", "themes", "scales", "burst", "churn", "pinned"]
+MAX_BUFFERS, MAX_CALLBACKS = 3, 2  # notify::present limits
+POOL_IDLE_BYTES = 1 << 20
 NAMESPACE = "decebal-notifications"
 CATCHER_NAMESPACE = "decebal-notifications-outside"
 LAYER_TOP, LAYER_OVERLAY = 2, 3
@@ -229,6 +231,80 @@ def trace_count(trace, obj, req):
     return sum(1 for o, _, r, _ in requests(trace) if o == obj and r == req)
 
 
+def wire(trace):
+    """Requests and events of a WAYLAND_DEBUG=client trace in wire order: ('->' | '<-', object, id, name, args)."""
+    out = []
+    for line in trace.splitlines():
+        m = POPUP.REQ.search(line)
+        if m:
+            out.append(("->", m["obj"], int(m["id"]), m["req"], [a.strip() for a in m["args"].split(",")] if m["args"] else []))
+            continue
+        e = EVT.search(line)
+        if e:
+            out.append(("<-", e["obj"], int(e["id"]), e["ev"], [a.strip() for a in e["args"].split(",")] if e["args"] else []))
+    return out
+
+
+def buffer_peaks(trace):
+    """({surface: most shm buffers alive at once for it, counting buffers the compositor still held}, buffers created)."""
+    owner, live, peak, created = {}, {}, {}, 0
+    for way, obj, ident, name, args in wire(trace):
+        if way != "->":
+            continue
+        if obj == "wl_shm_pool" and name == "create_buffer" and args:
+            created += 1
+            b = int(args[0].split("@")[1])
+            old = owner.pop(b, None)  # a recycled protocol id is a new buffer
+            if old is not None:
+                live[old].discard(b)
+        elif obj == "wl_surface" and name == "attach" and args and args[0].startswith("wl_buffer@"):
+            b = int(args[0].split("@")[1])
+            if b not in owner:
+                owner[b] = ident
+                live.setdefault(ident, set()).add(b)
+                peak[ident] = max(peak.get(ident, 0), len(live[ident]))
+        elif obj == "wl_buffer" and name == "destroy" and ident in owner:
+            live[owner.pop(ident)].discard(ident)
+    return peak, created
+
+
+def callback_peaks(trace):
+    """{surface: most frame callbacks outstanding at once} and the number requested."""
+    owner, out, peak, requested = {}, {}, {}, 0
+    for way, obj, ident, name, args in wire(trace):
+        if way == "->" and obj == "wl_surface" and name == "frame" and args:
+            requested += 1
+            owner[int(args[0].split("@")[1])] = ident
+            out[ident] = out.get(ident, 0) + 1
+            peak[ident] = max(peak.get(ident, 0), out[ident])
+        elif way == "<-" and obj == "wl_callback" and name == "done" and ident in owner:
+            surface = owner.pop(ident)
+            out[surface] -= 1
+    return peak, requested
+
+
+def check_presentation_bounds(trace, present, failures, label):
+    """Per surface at most 3 buffers and 2 frame callbacks alive, on the wire and in the daemon's own counters."""
+    buffers, created = buffer_peaks(trace)
+    callbacks, requested = callback_peaks(trace)
+    for surface, peak in buffers.items():
+        if peak > MAX_BUFFERS:
+            failures.append(f"{label}: surface {surface} had {peak} shm buffers alive (bound {MAX_BUFFERS})")
+    for surface, peak in callbacks.items():
+        if peak > MAX_CALLBACKS:
+            failures.append(f"{label}: surface {surface} had {peak} frame callbacks outstanding (bound {MAX_CALLBACKS})")
+    if present:
+        totals, limits = present["totals"], present["limits"]
+        if totals["max_buffers"] > limits["buffers"] or totals["max_callbacks"] > limits["callbacks"]:
+            failures.append(f"{label}: the daemon reports {totals['max_buffers']} buffers / {totals['max_callbacks']} callbacks, past its own limits")
+        for s in present["surfaces"]:
+            if s["buffers"] > limits["buffers"] or s["bytes"] > limits["surface_bytes"]:
+                failures.append(f"{label}: surface {s['id']} holds {s['buffers']} buffers / {s['bytes']} bytes")
+        if present["total_bytes"] > limits["total_bytes"]:
+            failures.append(f"{label}: {present['total_bytes']} shm bytes in use, past the {limits['total_bytes']} budget")
+    return {"buffer_peaks": buffers, "callback_peaks": callbacks, "buffers_created": created, "callbacks_requested": requested}
+
+
 def closed_reasons(signals):
     return {args[0]: args[1] for member, args in signals if member == "NotificationClosed" and len(args) == 2}
 
@@ -341,7 +417,8 @@ class Rig:
     # -- decnotify and the recorders
     def start_daemon(self, label="decnotify", **extra):
         env = self.client_env(WAYLAND_DEBUG="client", DECNOTIFY_DEBUG_BANNERS=str(self.root / f"{label}-banners.json"),
-                              DECNOTIFY_DEBUG_HISTORY=str(self.root / f"{label}-history.json"), **extra)
+                              DECNOTIFY_DEBUG_HISTORY=str(self.root / f"{label}-history.json"),
+                              DECNOTIFY_DEBUG_WAYLAND=str(self.root / f"{label}-present.json"), **extra)
         proc = self.spawn(label, [str(self.bin / "decnotify")], env)
         self.daemon, self.daemon_label = proc, label
         wait_for(lambda: self.owner_alive(), 10, "decnotify owns " + BUS)
@@ -357,6 +434,17 @@ class Rig:
     def banners(self, label=None):
         path = self.root / f"{label or self.daemon_label}-banners.json"
         return json.loads(path.read_text()) if path.exists() and path.stat().st_size else {"active": [], "queued": []}
+
+    def present(self, label=None):
+        """The daemon's presentation counters (buffers, frame callbacks, commits), or None before the first commit."""
+        path = self.root / f"{label or self.daemon_label}-present.json"
+        return json.loads(path.read_text()) if path.exists() and path.stat().st_size else None
+
+    def rss_kb(self):
+        for line in Path(f"/proc/{self.daemon.pid}/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1])
+        return 0
 
     def history(self, label=None):
         path = self.root / f"{label or self.daemon_label}-history.json"
@@ -667,6 +755,69 @@ def phase_pinned(rig):
     used = {by_id.get(int(s["output"].split("@")[1])) for s in layer_surfaces(reqs) if s["namespace"] == NAMESPACE and s["output"].startswith("wl_output@")}
     rig.check(used == {"HEADLESS-2"}, f"pinned: banners requested on {used}, expected only HEADLESS-2")
     rig.evidence["pinned_outputs"] = sorted(x for x in used if x)
+
+
+def phase_burst(rig):
+    """A burst of input on a banner and on the history panel: bounded buffers and callbacks, coalesced commits."""
+    rig.sway_cmd("focus", "output", "HEADLESS-1")
+    pid = rig.notify(summary="burst", actions=[("reply", "Reply"), ("later", "Later")], timeout=60000)
+    banner = rig.settle(lambda: next((b for b in rig.banners()["active"] if b["id"] == pid), None), "burst banner shown")
+    if not banner:
+        return
+    rig.settle(lambda: (rig.present() or {}).get("totals", {}).get("commits", 0) >= 1, "the banner's first frame was committed")
+    points = [button_center(banner, "reply", 1.5), button_center(banner, "later", 1.5), close_center(banner, 1.5)]
+    before = rig.present()["totals"]
+    motions = 600
+    # one IPC call: 600 pointer motions with nothing between them, alternating over the buttons (a hover repaint each)
+    rig.sway_cmd("; ".join(f"seat seat0 cursor set {round(points[n % 3][0])} {round(points[n % 3][1])}" for n in range(motions)))
+    time.sleep(2.0)
+    after = rig.present()
+    commits = after["totals"]["commits"] - before["commits"]
+    rig.check(commits < motions / 4, f"burst: {commits} commits for {motions} motions (frames were not coalesced)")
+    rig.check(after["totals"]["coalesced"] - before["coalesced"] > 0 or commits < motions / 4, "burst: no frame was ever replaced before it was shown")
+    rig.check(all(not s["frame_pending"] for s in after["surfaces"]), "burst: a frame is still waiting after the burst ended")
+    rig.evidence["burst_banner"] = {"motions": motions, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-banner")}
+    # the history panel: 150 Tab presses in one wtype call, each moving the focus ring
+    rig.cli("history", "show")
+    rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.enter", rig.trace()), "the panel has the keyboard")
+    before = rig.present()["totals"]
+    rig.type(*(["-k", "Tab"] * 150))
+    time.sleep(2.0)
+    after = rig.present()
+    commits = after["totals"]["commits"] - before["commits"]
+    rig.check(commits < 150 / 2, f"burst: {commits} panel commits for 150 key presses")
+    rig.evidence["burst_panel"] = {"keys": 150, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-panel")}
+    rig.type("-k", "Escape")
+    time.sleep(0.5)
+
+
+def phase_churn(rig):
+    """Scale and size churn with banners and the panel up never passes the bounds; everything is given back when idle."""
+    rig.sway_cmd("focus", "output", "HEADLESS-1")
+    ids = [rig.notify(summary=f"churn {i}", actions=[("reply", "Reply")], timeout=60000) for i in range(3)]
+    rig.settle(lambda: len(rig.banners()["active"]) >= 3, "banners before the churn")
+    rss_before = rig.rss_kb()
+    for cycle in range(3):
+        # one IPC call per cycle: the scale changes follow each other with no pause
+        rig.sway_cmd("; ".join(f"output HEADLESS-1 scale {s}" for s in (2, 1, 1.5, 1.25, 2, 1.5) * 3))
+        time.sleep(1.0)
+        if cycle == 1:
+            rig.cli("history", "show")  # the panel is up through the next scale changes
+        rig.notify(summary=f"during {cycle}", actions=[("reply", "Reply")], replaces=ids[0], timeout=60000)
+    time.sleep(1.5)
+    present = rig.present()
+    rig.evidence["churn"] = check_presentation_bounds(rig.trace(), present, rig.failures, "churn")
+    rig.check(rig.daemon.poll() is None, "churn: the daemon died")
+    # idle again: close the panel and every banner; buffers of gone surfaces are released and the pool shrinks
+    rig.type("-k", "Escape")  # closes the panel when it is open (the sink only records the key otherwise)
+    time.sleep(0.5)
+    for i in ids:
+        rig.call("CloseNotification", "u", i)
+    idle = rig.settle(lambda: (lambda p: p if p and not p["surfaces"] and p["graveyard"] == 0 and p["pool_bytes"] <= POOL_IDLE_BYTES else None)(rig.present()),
+                      "no surfaces, no held buffers and a small pool after the churn", 10)
+    rig.evidence["churn_idle"] = idle
+    growth = rig.rss_kb() - rss_before
+    rig.check(growth < 16 * 1024, f"churn: resident memory grew {growth} kB across the churn")
 
 
 PHASES = {name: globals()[f"phase_{name}"] for name in ALL_PHASES}

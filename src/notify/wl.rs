@@ -17,6 +17,7 @@
 use super::geom::{button_of, effective_scale, logical_output_size, logical_rects, margins, pick_output, transparent_plan, wayland_metrics, BarFacts, InsetPolicy, KeyRepeat, Scale, ScrollAccum};
 use super::history::{history_dimensions, HistOutcome, HistWin};
 use super::model::Notification;
+use super::present::{Entry, Pick, Plan, Presenter, Refusal, Releasable, Stats, MAX_TOTAL_BYTES};
 use super::view::{opaque_rects, Banner, BannerLayout, Btn, Host, Metrics, Render, Stack, ThemeWake};
 use super::{Frontend, Shared, UiEvent, Wake};
 use crate::backend::{poll_readable, poll_writable};
@@ -41,7 +42,10 @@ use smithay_client_toolkit::{
         wlr_layer::{Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface, LayerSurfaceConfigure},
         WaylandSurface,
     },
-    shm::{slot::SlotPool, Shm, ShmHandler},
+    shm::{
+        slot::{Buffer, SlotPool},
+        Shm, ShmHandler,
+    },
 };
 use std::os::fd::{AsRawFd, RawFd};
 use std::time::{Duration, Instant};
@@ -87,20 +91,29 @@ struct Surf {
     fractional: Option<WpFractionalScaleV1>,
     /// The output a catcher covers.
     output: Option<wl_output::WlOutput>,
-    /// Device pixels.
+    /// Device pixels the surface is laid out at.
     size: (u32, u32),
     pos: (i32, i32),
     configured: bool,
+    /// What the compositor has been told and has committed.
     sent: Sent,
-    /// The latest painted frame that is not committed yet.
-    frame: Option<Pixmap>,
+    /// Device size of the buffer last attached (the margins and the input region belong to it).
+    committed_size: Option<(u32, u32)>,
+    /// The latest painted frame, this surface's bounded buffers and its frame pacing.
+    pres: Presenter<Buffer, Pixmap>,
     /// Input outline of the last committed frame, in device pixels.
     shape: Vec<(i32, i32, u32, u32)>,
     region_dirty: bool,
+    /// Something waits on a frame callback, a buffer release or a scheduled retry: the loop must wake for it.
+    deferred: bool,
+    /// A refused allocation was reported (cleared by the next commit).
+    refusal_logged: bool,
     /// A catcher's logical size from its configure.
     area: (u32, u32),
-    /// The logical size a catcher's transparent buffer was prepared for.
+    /// The logical size a catcher was last committed for.
     covered: Option<(u32, u32)>,
+    /// Size of the transparent buffer a catcher has attached.
+    attached: Option<(u32, u32)>,
 }
 
 impl Surf {
@@ -114,6 +127,54 @@ impl Surf {
         }
     }
 }
+
+impl Releasable for Buffer {
+    fn released(&self) -> bool {
+        !self.slot().has_active_buffers()
+    }
+}
+
+/// Sends the size, margins and scale that differ from what was last committed; true when anything was sent.
+/// `margin` is `None` when the margins must stay as they are.
+fn send_geometry(layer: &LayerSurface, viewport: Option<&WpViewport>, sent: &mut Sent, logical: (u32, u32), margin: Option<(i32, i32)>, scale: Scale) -> bool {
+    let mut changed = false;
+    let mut geometry = false;
+    if sent.logical != Some(logical) {
+        layer.set_size(logical.0, logical.1);
+        sent.logical = Some(logical);
+        changed = true;
+        geometry = true;
+    }
+    if let Some(margin) = margin {
+        if sent.margin != Some(margin) {
+            layer.set_margin(margin.0, margin.1, 0, 0);
+            sent.margin = Some(margin);
+            changed = true;
+        }
+    }
+    if geometry || sent.scale != Some(scale) {
+        match scale {
+            Scale::Integer(n) => {
+                layer.wl_surface().set_buffer_scale(n.max(1));
+                if let Some(v) = viewport {
+                    v.set_destination(-1, -1);
+                }
+            }
+            Scale::Fractional(_) => {
+                layer.wl_surface().set_buffer_scale(1);
+                if let Some(v) = viewport {
+                    v.set_destination(logical.0 as i32, logical.1 as i32);
+                }
+            }
+        }
+        sent.scale = Some(scale);
+        changed = true;
+    }
+    changed
+}
+
+/// Shm memory the pool keeps once no buffer is left anywhere (a bigger pool is replaced by a small one).
+const POOL_KEEP: usize = 1 << 20;
 
 /// An explicit region: empty with no rectangles.
 fn set_region(compositor: &CompositorState, surface: &wl_surface::WlSurface, rects: &[(i32, i32, i32, i32)]) {
@@ -170,6 +231,14 @@ struct WlHost {
     /// Banners ignore input (the history panel is open).
     inert: bool,
     catchers_wanted: bool,
+    /// Buffers of destroyed or parked surfaces the compositor has not released yet. They still count against the
+    /// byte budget and are dropped (destroyed) the moment they are released.
+    graveyard: Vec<Entry<Buffer>>,
+    /// The totals of surfaces that no longer exist.
+    gone: Stats,
+    /// `DECNOTIFY_DEBUG_WAYLAND`: where to write the presentation counters.
+    debug_path: Option<std::ffi::OsString>,
+    debug_dirty: bool,
 }
 
 impl WlHost {
@@ -294,128 +363,292 @@ impl WlHost {
             pos,
             configured: false,
             sent: Sent::default(),
-            frame: None,
+            committed_size: None,
+            pres: Presenter::default(),
             shape: Vec::new(),
             region_dirty: false,
+            deferred: false,
+            refusal_logged: false,
             area: (0, 0),
             covered: None,
+            attached: None,
         });
-        self.sync(id);
+        // the initial commit of a banner or panel: only state, no buffer
+        let i = self.surfaces.len() - 1;
+        self.present_surface(i, Instant::now());
         id
+    }
+
+    /// A surface goes away: its buffers wait in the graveyard until the compositor releases them.
+    fn dispose(&mut self, mut s: Surf) {
+        self.graveyard.extend(s.pres.buffers.take_all());
+        self.gone.merge(&s.pres.stats);
+        self.debug_dirty = true;
+        s.release();
     }
 
     fn remove(&mut self, id: SurfId) {
         if let Some(i) = self.index(id) {
-            self.surfaces.remove(i).release();
+            let s = self.surfaces.remove(i);
+            self.dispose(s);
         }
     }
 
-    /// Sends what changed about a banner or panel (size, margins, scale) and commits the frame that is waiting.
-    fn sync(&mut self, id: SurfId) {
-        let Some(i) = self.index(id) else { return };
-        if self.surfaces[i].kind == Kind::Catcher {
-            return self.sync_catcher(i);
+    /// Every byte of shm memory in use: live surfaces plus buffers the compositor still holds of gone ones.
+    fn total_bytes(&self) -> usize {
+        self.surfaces.iter().map(|s| s.pres.buffers.bytes()).sum::<usize>() + self.graveyard.iter().map(Entry::bytes).sum::<usize>()
+    }
+
+    /// Commits whatever is ready, once per event-loop iteration: a banner's or the panel's latest frame (when its frame
+    /// callback has come and a buffer is free), margin changes, and the input region. Everything painted in between
+    /// was only stored, so a burst of input costs one commit.
+    fn present(&mut self, now: Instant) {
+        for i in 0..self.surfaces.len() {
+            self.present_surface(i, now);
         }
-        let (scale, m) = (self.scale, self.layout_metrics());
-        let inert = self.inert && self.surfaces[i].kind == Kind::Banner;
-        let s = &mut self.surfaces[i];
-        let Some(layer) = s.layer.as_ref() else { return };
-        let logical = (scale.logical(s.size.0), scale.logical(s.size.1));
-        let margin = margins(scale, &m, s.pos.0, s.pos.1, s.size);
-        let mut changed = false;
-        if s.sent.logical != Some(logical) {
-            layer.set_size(logical.0, logical.1);
-            s.sent.logical = Some(logical);
-            changed = true;
+        self.graveyard.retain(|e| !e.buf.released());
+        self.shrink_pool();
+        if self.debug_dirty {
+            self.write_debug();
         }
-        if s.sent.margin != Some(margin) {
-            layer.set_margin(margin.0, margin.1, 0, 0);
-            s.sent.margin = Some(margin);
-            changed = true;
+    }
+
+    /// The nearest moment a deferred surface has to be looked at again (a lost frame callback's fallback or a busy
+    /// retry); `None` when the loop may sleep until an event arrives. Never zero, so it cannot spin.
+    fn next_wake(&self, now: Instant) -> Option<Duration> {
+        self.surfaces.iter().filter(|s| s.deferred || s.pres.frame.is_some()).filter_map(|s| s.pres.pacer.wake_in(now)).min().map(|d| d.max(Duration::from_millis(1)))
+    }
+
+    fn callback_done(&mut self, surface: &wl_surface::WlSurface) {
+        if let Some(s) = self.surfaces.iter_mut().find(|s| s.layer.as_ref().is_some_and(|l| l.wl_surface() == surface)) {
+            s.pres.callback_done();
+            self.debug_dirty = true;
         }
-        if changed || s.sent.scale != Some(scale) {
-            match scale {
-                Scale::Integer(n) => {
-                    layer.wl_surface().set_buffer_scale(n.max(1));
-                    if let Some(v) = &s.viewport {
-                        v.set_destination(-1, -1);
-                    }
-                }
-                Scale::Fractional(_) => {
-                    layer.wl_surface().set_buffer_scale(1);
-                    if let Some(v) = &s.viewport {
-                        v.set_destination(logical.0 as i32, logical.1 as i32);
-                    }
-                }
+    }
+
+    /// With no buffer left anywhere the pool, which only ever grows, is replaced by a small one.
+    fn shrink_pool(&mut self) {
+        if self.pool.len() > POOL_KEEP && self.graveyard.is_empty() && self.surfaces.iter().all(|s| s.pres.buffers.is_empty()) {
+            if let Ok(pool) = SlotPool::new(64 * 1024, &self.shm) {
+                self.pool = pool;
             }
-            s.sent.scale = Some(scale);
-            changed = true;
         }
+    }
+
+    fn write_debug(&mut self) {
+        self.debug_dirty = false;
+        let Some(path) = &self.debug_path else { return };
+        let mut total = self.gone;
+        let surfaces: Vec<_> = self
+            .surfaces
+            .iter()
+            .map(|s| {
+                total.merge(&s.pres.stats);
+                serde_json::json!({
+                    "id": s.id, "kind": format!("{:?}", s.kind), "configured": s.configured, "buffers": s.pres.buffers.len(), "bytes": s.pres.buffers.bytes(),
+                    "callbacks_outstanding": s.pres.pacer.outstanding(), "frame_pending": s.pres.frame.is_some(), "stats": s.pres.stats.json(),
+                })
+            })
+            .collect();
+        let data = serde_json::json!({
+            "scale": self.scale.factor(), "surfaces": surfaces, "graveyard": self.graveyard.len(), "total_bytes": self.total_bytes(), "pool_bytes": self.pool.len(),
+            "limits": {"buffers": super::present::MAX_BUFFERS, "callbacks": super::present::MAX_CALLBACKS, "surface_bytes": super::present::MAX_SURFACE_BYTES, "total_bytes": MAX_TOTAL_BYTES},
+            "totals": total.json(),
+        });
+        let _ = std::fs::write(path, data.to_string());
+    }
+
+    /// One surface's turn. Before its first configure only state goes out. After it, at most one commit per call:
+    /// the waiting frame (with its size, scale, margins and input region together, in a released buffer, with a frame
+    /// callback), else a margin or input-region change that does not depend on a new frame.
+    fn present_surface(&mut self, i: usize, now: Instant) {
+        if self.surfaces[i].kind == Kind::Catcher {
+            return self.present_catcher(i, now);
+        }
+        let want_scale = self.scale;
+        let m = self.layout_metrics();
+        let inert = self.inert && self.surfaces[i].kind == Kind::Banner;
+        let budget_left = MAX_TOTAL_BYTES.saturating_sub(self.total_bytes());
+        let s = &mut self.surfaces[i];
+        s.deferred = false;
+        let Some(layer) = s.layer.as_ref() else { return };
+        let want_logical = (want_scale.logical(s.size.0), want_scale.logical(s.size.1));
         if !s.configured {
-            // Before the first configure only state may be sent; the initial commit is what asks for it.
-            if changed {
+            let margin = margins(want_scale, &m, s.pos.0, s.pos.1, s.size);
+            if send_geometry(layer, s.viewport.as_ref(), &mut s.sent, want_logical, Some(margin), want_scale) {
                 layer.commit();
             }
             return;
         }
-        let mut attached = false;
-        if let Some(pm) = s.frame.take() {
-            let (w, h) = s.size;
-            if (pm.width(), pm.height()) == (w, h) {
-                match self.pool.create_buffer(w as i32, h as i32, w as i32 * 4, wl_shm::Format::Argb8888) {
-                    Ok((buffer, canvas)) => {
-                        copy_argb(pm.data(), canvas);
-                        layer.wl_surface().damage_buffer(0, 0, w as i32, h as i32);
-                        attached = buffer.attach_to(layer.wl_surface()).is_ok();
-                    }
-                    Err(e) => crate::log_warn!("decnotify: cannot allocate a shm buffer: {e}"),
+        // buffers of an older size or scale go as soon as the compositor releases them, even with nothing to draw
+        s.pres.buffers.reap(Some(s.size));
+        let plan = s.pres.plan(now, s.size, budget_left, |pm| (pm.width(), pm.height()));
+        match plan {
+            Plan::Reuse(_) | Plan::New => {}
+            Plan::Refused(why) => {
+                if !s.refusal_logged {
+                    s.refusal_logged = true;
+                    let reason = if why == Refusal::Oversize { "larger than one buffer may be" } else { "past the shm memory budget" };
+                    crate::log_warn!("decnotify: a {}x{} frame is {reason}; the surface keeps its last frame", s.size.0, s.size.1);
                 }
-                if attached {
-                    s.shape = opaque_rects(&pm, 16);
-                    s.region_dirty = true;
-                }
+                self.debug_dirty = true;
             }
-            // a frame of another size is stale: the paint that follows the new layout replaces it
+            Plan::Deferred | Plan::Nothing | Plan::Stale => {
+                // No new frame goes out now. Margin changes need no repaint when size and scale are what the compositor
+                // has; the input region keeps following the last committed frame (it only changes with a new one or
+                // when the banners go inert).
+                let mut changed = false;
+                let same = s.sent.logical == Some(want_logical) && s.sent.scale == Some(want_scale);
+                let margin = margins(want_scale, &m, s.pos.0, s.pos.1, s.committed_size.unwrap_or(s.size));
+                if same && s.sent.margin != Some(margin) {
+                    if s.pres.pacer.can_commit(now) {
+                        changed |= send_geometry(layer, s.viewport.as_ref(), &mut s.sent, want_logical, Some(margin), want_scale);
+                    } else {
+                        s.deferred = true;
+                    }
+                }
+                if s.region_dirty {
+                    let scale = s.sent.scale.unwrap_or(want_scale);
+                    let rects = if inert { Vec::new() } else { logical_rects(&s.shape, scale) };
+                    set_region(&self.compositor, layer.wl_surface(), &rects);
+                    s.region_dirty = false;
+                    changed = true;
+                }
+                if plan == Plan::Deferred {
+                    s.deferred = true;
+                }
+                if changed {
+                    layer.commit();
+                    self.debug_dirty = true;
+                }
+                return;
+            }
         }
-        let mut region = false;
-        if s.region_dirty {
-            let rects = if inert { Vec::new() } else { logical_rects(&s.shape, scale) };
-            set_region(&self.compositor, layer.wl_surface(), &rects);
-            s.region_dirty = false;
-            region = true;
+        if let Plan::Refused(_) = plan {
+            return;
         }
-        if attached || changed || region {
-            layer.commit();
+        // Draw the frame into the chosen buffer.
+        let size = s.size;
+        let (w, h) = size;
+        let reused = matches!(plan, Plan::Reuse(_));
+        let idx;
+        let pm;
+        match plan {
+            Plan::Reuse(k) => {
+                let Some(canvas) = s.pres.buffers.get(k).canvas(&mut self.pool) else {
+                    s.pres.pacer.busy(now);
+                    s.deferred = true;
+                    return;
+                };
+                let Some(frame) = s.pres.take() else { return };
+                copy_argb(frame.data(), canvas);
+                pm = frame;
+                idx = k;
+            }
+            _ => match self.pool.create_buffer(w as i32, h as i32, w as i32 * 4, wl_shm::Format::Argb8888) {
+                Ok((buffer, canvas)) => {
+                    let Some(frame) = s.pres.take() else { return };
+                    copy_argb(frame.data(), canvas);
+                    pm = frame;
+                    idx = s.pres.insert(buffer, size);
+                }
+                Err(e) => {
+                    // The frame stays pending; the retry is scheduled, not spun on.
+                    crate::log_warn!("decnotify: cannot allocate a {w}x{h} shm buffer: {e}");
+                    s.pres.pacer.busy(now);
+                    s.pres.stats.refused += 1;
+                    s.deferred = true;
+                    self.debug_dirty = true;
+                    return;
+                }
+            },
         }
+        if s.pres.buffers.get(idx).attach_to(layer.wl_surface()).is_err() {
+            // not actually free: keep the frame for the next attempt
+            s.pres.frame = Some(pm);
+            s.pres.pacer.busy(now);
+            s.deferred = true;
+            return;
+        }
+        let margin = margins(want_scale, &m, s.pos.0, s.pos.1, size);
+        send_geometry(layer, s.viewport.as_ref(), &mut s.sent, want_logical, Some(margin), want_scale);
+        layer.wl_surface().damage_buffer(0, 0, w as i32, h as i32);
+        let request = s.pres.pacer.should_request();
+        if request {
+            layer.wl_surface().frame(&self.qh, layer.wl_surface().clone());
+        }
+        // the input region follows the frame that is now attached
+        s.shape = opaque_rects(&pm, 16);
+        let rects = if inert { Vec::new() } else { logical_rects(&s.shape, want_scale) };
+        set_region(&self.compositor, layer.wl_surface(), &rects);
+        s.region_dirty = false;
+        layer.commit();
+        s.pres.committed(now, request, reused);
+        s.committed_size = Some(size);
+        s.refusal_logged = false;
+        self.debug_dirty = true;
     }
 
-    /// A catcher covers its output with a transparent buffer and takes input everywhere on it.
-    fn sync_catcher(&mut self, i: usize) {
+    /// A catcher covers its output with one transparent buffer and takes input everywhere on it.
+    fn present_catcher(&mut self, i: usize, now: Instant) {
         let viewporter = self.viewporter.is_some();
+        let budget_left = MAX_TOTAL_BYTES.saturating_sub(self.total_bytes());
         let s = &mut self.surfaces[i];
+        s.deferred = false;
         let Some(layer) = s.layer.as_ref() else { return };
         if !s.configured || s.area.0 == 0 || s.area.1 == 0 || s.covered == Some(s.area) {
             return;
         }
         let (lw, lh) = s.area;
         let (bw, bh, scale) = transparent_plan(lw, lh, viewporter);
-        match self.pool.create_buffer(bw as i32, bh as i32, bw as i32 * 4, wl_shm::Format::Argb8888) {
-            Ok((buffer, canvas)) => {
-                canvas.fill(0);
-                if let Some(v) = &s.viewport {
-                    v.set_destination(lw as i32, lh as i32);
+        let size = (bw, bh);
+        if s.attached != Some(size) {
+            if !s.pres.pacer.can_commit(now) {
+                s.deferred = true;
+                return;
+            }
+            let idx = match s.pres.buffers.pick(size, budget_left) {
+                Pick::Reuse(k) => {
+                    let Some(canvas) = s.pres.buffers.get(k).canvas(&mut self.pool) else { return };
+                    canvas.fill(0);
+                    k
                 }
-                layer.wl_surface().set_buffer_scale(scale);
-                layer.wl_surface().damage_buffer(0, 0, bw as i32, bh as i32);
-                if buffer.attach_to(layer.wl_surface()).is_err() {
+                Pick::New => match self.pool.create_buffer(bw as i32, bh as i32, bw as i32 * 4, wl_shm::Format::Argb8888) {
+                    Ok((buffer, canvas)) => {
+                        canvas.fill(0);
+                        s.pres.insert(buffer, size)
+                    }
+                    Err(e) => {
+                        crate::log_warn!("decnotify: cannot allocate a {bw}x{bh} shm buffer: {e}");
+                        s.pres.pacer.busy(now);
+                        s.deferred = true;
+                        return;
+                    }
+                },
+                Pick::Busy => {
+                    s.pres.pacer.busy(now);
+                    s.deferred = true;
                     return;
                 }
-                set_region(&self.compositor, layer.wl_surface(), &[(0, 0, lw as i32, lh as i32)]);
-                layer.commit();
-                s.covered = Some(s.area);
+                Pick::Refused(_) => {
+                    crate::log_warn!("decnotify: a click catcher buffer was refused by the memory budget");
+                    return;
+                }
+            };
+            if s.pres.buffers.get(idx).attach_to(layer.wl_surface()).is_err() {
+                return;
             }
-            Err(e) => crate::log_warn!("decnotify: cannot allocate a shm buffer: {e}"),
+            s.attached = Some(size);
         }
+        if let Some(v) = &s.viewport {
+            v.set_destination(lw as i32, lh as i32);
+        }
+        layer.wl_surface().set_buffer_scale(scale);
+        layer.wl_surface().damage_buffer(0, 0, bw as i32, bh as i32);
+        set_region(&self.compositor, layer.wl_surface(), &[(0, 0, lw as i32, lh as i32)]);
+        layer.commit();
+        s.covered = Some(s.area);
+        self.debug_dirty = true;
     }
 
     /// The metrics the stack was laid out with (the applied scale and output size, not the latest events).
@@ -430,9 +663,13 @@ impl WlHost {
     fn closed(&mut self, layer: &LayerSurface) -> Option<(SurfId, Kind)> {
         let i = self.surfaces.iter().position(|s| s.layer.as_ref().is_some_and(|l| l.wl_surface() == layer.wl_surface()))?;
         if self.surfaces[i].kind == Kind::Catcher {
-            self.surfaces.remove(i).release();
+            let s = self.surfaces.remove(i);
+            self.dispose(s);
             return None;
         }
+        // Its buffers wait in the graveyard; a rebuilt surface starts with an empty set under the same bound.
+        let entries = self.surfaces[i].pres.buffers.take_all();
+        self.graveyard.extend(entries);
         // The output it was on is unusable (or the compositor is closing it): do not rebuild onto that output.
         self.target = None;
         self.fractional = None;
@@ -446,6 +683,10 @@ impl WlHost {
         s.layer = None;
         s.configured = false;
         s.sent = Sent::default();
+        s.committed_size = None;
+        s.deferred = false;
+        // callbacks requested on the closed surface never arrive
+        s.pres.pacer = Default::default();
         Some((s.id, s.kind))
     }
 
@@ -466,7 +707,6 @@ impl WlHost {
             s.viewport = viewport;
             s.fractional = fractional;
             s.region_dirty = true;
-            self.sync(*id);
         }
         !parked.is_empty()
     }
@@ -482,7 +722,6 @@ impl WlHost {
             if let Some(i) = self.index(id) {
                 self.surfaces[i].region_dirty = true;
             }
-            self.sync(id);
         }
     }
 
@@ -504,16 +743,12 @@ impl WlHost {
         }
     }
 
-    /// Stores a painted frame for the history panel and commits it.
+    /// Stores a painted frame. Only the latest is kept; it is committed by [`Self::present`], once per loop iteration.
     fn paint_pixmap(&mut self, id: SurfId, pm: Pixmap) {
         if let Some(i) = self.index(id) {
-            self.surfaces[i].frame = Some(pm);
+            self.surfaces[i].pres.submit(pm);
+            self.debug_dirty = true;
         }
-        self.sync(id);
-    }
-
-    fn banner_ids(&self) -> Vec<SurfId> {
-        self.surfaces.iter().filter(|s| s.kind != Kind::Catcher).map(|s| s.id).collect()
     }
 }
 
@@ -565,11 +800,8 @@ impl Host for WlHost {
         self.r.fonts.trim();
     }
 
-    fn flush(&mut self) {
-        for id in self.banner_ids() {
-            self.sync(id);
-        }
-    }
+    /// Nothing is sent here: commits are coalesced into [`WlHost::present`], once per loop iteration.
+    fn flush(&mut self) {}
 }
 
 /// What a protocol handler saw; handled in [`Frontend::pump`] where the shared state is available.
@@ -650,6 +882,10 @@ impl WlUi {
             next_id: 1,
             inert: false,
             catchers_wanted: false,
+            graveyard: Vec::new(),
+            gone: Stats::default(),
+            debug_path: std::env::var_os("DECNOTIFY_DEBUG_WAYLAND").filter(|v| !v.is_empty()),
+            debug_dirty: false,
         };
         let mut state = State {
             registry_state: RegistryState::new(&globals),
@@ -850,6 +1086,11 @@ impl Frontend for WlUi {
     fn wait(&mut self, bus: RawFd, timeout: Option<Duration>) -> Result<Wake, String> {
         loop {
             self.queue.dispatch_pending(&mut self.state).map_err(werr)?;
+            // One commit per surface per loop turn, right before sleeping: everything painted since the last turn
+            // (a burst of input events included) has been coalesced into the latest frame. Frame callbacks and buffer
+            // releases that just arrived are what lets a waiting frame out.
+            let now = Instant::now();
+            self.state.host.present(now);
             match self.queue.flush() {
                 Ok(()) => {}
                 Err(e) if would_block(&e) => {
@@ -862,11 +1103,9 @@ impl Frontend for WlUi {
                 Err(e) => return Err(werr(e)),
             }
             let Some(guard) = self.queue.prepare_read() else { continue };
-            let repeat = self.state.repeat.wait(Instant::now());
-            let timeout = match (timeout, repeat) {
-                (Some(a), Some(b)) => Some(a.min(b)),
-                (a, b) => a.or(b),
-            };
+            let repeat = self.state.repeat.wait(now);
+            // A deferred frame is looked at again when its callback's fallback or its busy retry is due.
+            let timeout = [timeout, repeat, self.state.host.next_wake(now)].into_iter().flatten().min();
             let fds = [guard.connection_fd().as_raw_fd(), bus, self.theme.fd()];
             let ready = poll_readable(&fds, timeout).map_err(werr)?;
             if ready[0] {
@@ -920,7 +1159,6 @@ impl Frontend for WlUi {
             self.state.host.target = None;
             self.state.host.fractional = None;
         }
-        self.state.host.flush();
         Ok(out)
     }
 }
@@ -930,7 +1168,10 @@ impl Frontend for WlUi {
 impl CompositorHandler for State {
     fn scale_factor_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: i32) {}
     fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: wl_output::Transform) {}
-    fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: u32) {}
+    fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, surface: &wl_surface::WlSurface, _: u32) {
+        // The frame callback of a committed frame: the surface may present its newest one on the next turn.
+        self.host.callback_done(surface);
+    }
     fn surface_enter(&mut self, _: &Connection, _: &QueueHandle<Self>, surface: &wl_surface::WlSurface, output: &wl_output::WlOutput) {
         // The compositor chose where the first surface went (its focused output): later surfaces follow it.
         if self.host.target.is_none() && self.host.fixed_output.is_none() && self.host.lookup(surface).is_some_and(|(_, kind)| kind != Kind::Catcher) {
@@ -971,13 +1212,14 @@ impl LayerShellHandler for State {
     fn configure(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
         let Some((id, kind)) = self.host.lookup(layer.wl_surface()) else { return };
         let Some(i) = self.host.index(id) else { return };
+        self.host.debug_dirty = true;
         let s = &mut self.host.surfaces[i];
         s.configured = true;
         if kind == Kind::Catcher {
             s.area = configure.new_size;
         }
-        // Commits the frame that was waiting for the first configure (or the catcher's transparent buffer).
-        self.host.sync(id);
+        // The frame that waited for the first configure (and the catcher's transparent buffer) goes out in the next
+        // `present`, before the loop sleeps.
     }
 }
 
