@@ -19,6 +19,22 @@ use std::{
 
 const PORTS: &[&str] = &["gnome-adwaita", "gnome-catppuccin-dock"];
 
+/// A private, test-only `rdwmctl` for mode-specific caption styles: it answers `schema --offline` with the bundled schema (the explicit
+/// offline target the engine accepts when no rdwm is running) and passes `check-config` (the TOML is already parsed by the caller). Any other
+/// command fails. Tests that check the missing-capability refusal use a nonexistent path instead, never this fixture.
+fn fixture_rdwmctl(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let ctl = dir.join("fixture-rdwmctl");
+    let schema = include_str!("../src/settings/rdwm-schema.json");
+    fs::write(
+        &ctl,
+        format!("#!/bin/sh\nif [ \"$1 $2\" = \"schema --offline\" ]; then cat <<'RDWM_SCHEMA_EOF'\n{schema}\nRDWM_SCHEMA_EOF\nelif [ \"$1\" = check-config ]; then exit 0; else exit 2; fi\n"),
+    )
+    .unwrap();
+    fs::set_permissions(&ctl, fs::Permissions::from_mode(0o700)).unwrap();
+    ctl
+}
+
 /// The release that ships `control_center.style = "gnome"` (assigned by the release owner); the packages declare it as their floor.
 const GATE: (u32, u32, u32) = (0, 3, 0);
 const GATE_TEXT: &str = "0.3.0";
@@ -295,7 +311,7 @@ fn applying_a_port_keeps_wallpaper_and_user_layouts_and_writes_the_declared_stru
     for id in PORTS {
         let dir = scratch(id);
         fs::create_dir_all(dir.join("shell")).unwrap();
-        let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: dir.join("no.sock") };
+        let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: fixture_rdwmctl(&dir), socket: dir.join("no.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: themes() };
         fs::write(&paths.rdwm_config, "[wallpaper]\nimage = \"/private/photo.jpg\"\nmode = \"center\"\ncolor = \"#123456\"\n").unwrap();
         for mode in [Mode::Dark, Mode::Light] {
@@ -305,7 +321,9 @@ fn applying_a_port_keeps_wallpaper_and_user_layouts_and_writes_the_declared_stru
             let cfg = tomlcfg::Cfg::parse(cfg_text).unwrap();
             assert_eq!(cfg.get("wallpaper", "image"), Some(tomlcfg::Val::Str("/private/photo.jpg".into())), "{id}: wallpaper independent");
             assert_eq!(cfg.get("wallpaper", "mode"), Some(tomlcfg::Val::Str("center".into())));
-            assert_eq!(cfg.get("decoration", "style"), Some(tomlcfg::Val::Str("adwaita".into())));
+            // gnome-adwaita names a light caption style; the Catppuccin rice declares one `adwaita` style for both modes
+            let style = if *id == "gnome-adwaita" && mode == Mode::Light { "adwaita-light" } else { "adwaita" };
+            assert_eq!(cfg.get("decoration", "style"), Some(tomlcfg::Val::Str(style.into())), "{id} {mode:?}");
             assert_eq!(cfg.get("decoration", "height"), Some(tomlcfg::Val::Int(47)));
             assert_eq!(cfg.get("decoration", "radius"), Some(tomlcfg::Val::Int(15)));
             let shell: Value = serde_json::from_str(&p.writes.iter().find(|w| w.path == paths.shell_json()).unwrap().new).unwrap();
@@ -323,6 +341,23 @@ fn applying_a_port_keeps_wallpaper_and_user_layouts_and_writes_the_declared_stru
         }
         fs::remove_dir_all(dir).unwrap();
     }
+}
+
+/// The mode-specific caption styles are only applied on proof: with no running rdwm and a target `rdwmctl` that cannot list its styles, the
+/// engine refuses before writing anything (the fixture above must never hide this).
+#[test]
+fn a_mode_specific_port_is_refused_when_the_target_cannot_prove_its_styles() {
+    let dir = scratch("gnome-adwaita-no-proof");
+    fs::create_dir_all(dir.join("shell")).unwrap();
+    let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: dir.join("missing-rdwmctl"), socket: dir.join("no.sock") };
+    let src = Source { shell_json: paths.shell_json(), themes_dir: themes() };
+    fs::write(&paths.rdwm_config, "[general]\n").unwrap();
+    for mode in [Mode::Dark, Mode::Light] {
+        let err = apply::plan(&src, &paths, "gnome-adwaita", &Selection { mode, ..Selection::default() }).err().expect("an unprovable style must not plan");
+        assert!(err.contains("could not be checked") && err.contains("Nothing was changed"), "{mode:?}: {err}");
+    }
+    assert_eq!(fs::read_to_string(&paths.rdwm_config).unwrap(), "[general]\n");
+    fs::remove_dir_all(dir).unwrap();
 }
 
 /// The genuine GNOME quick-settings look (`control_center.style = "gnome"`, `Style::Gnome`) ships with 0.3.0, so both packages declare it and
@@ -348,7 +383,7 @@ fn packages_declare_the_gnome_look_behind_the_0_3_0_gate() {
         // applying writes the GNOME look and all seven groups (the loadable copy on a build below the gate)
         let dir = scratch(&format!("{id}-gate"));
         fs::create_dir_all(dir.join("shell")).unwrap();
-        let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: dir.join("no.sock") };
+        let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: fixture_rdwmctl(&dir), socket: dir.join("no.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: themes() };
         let plan = apply::plan(&src, &paths, id, &Selection::default()).unwrap_or_else(|e| panic!("{id}: {e}"));
         let shell: Value = serde_json::from_str(&plan.writes.iter().find(|w| w.path == paths.shell_json()).unwrap().new).unwrap();
@@ -437,7 +472,7 @@ fn themes_never_override_the_global_tiling_preference() {
         }
         let dir = scratch(&format!("{id}-wm"));
         fs::create_dir_all(dir.join("shell")).unwrap();
-        let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: dir.join("no.sock") };
+        let paths = Paths { shell_dir: dir.join("shell"), rdwm_config: dir.join("config.toml"), rdwmctl: fixture_rdwmctl(&dir), socket: dir.join("no.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: themes() };
         let general = "[general]\nlayouts = [\"tile\", \"monocle\"]\nmfact = 0.61\nnmaster = 2\nsmart_gaps = true\n";
         fs::write(&paths.rdwm_config, general).unwrap();

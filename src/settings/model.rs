@@ -1081,7 +1081,9 @@ pub mod tests_support {
         std::fs::create_dir_all(d.join("shell")).unwrap();
         let cfg = d.join("config.toml");
         std::fs::write(&cfg, text).unwrap();
-        let paths = Paths { rdwm_config: cfg.clone(), shell_dir: d.join("shell"), rdwmctl: "/nonexistent/rdwmctl".into(), socket: d.join("no-such-rdwm.sock") };
+        // Theme packages that name mode-specific styles need an explicit offline target; never a live desktop probe.
+        let rdwmctl = crate::theme::engine::apply::tests::fixture_rdwmctl(&d);
+        let paths = Paths { rdwm_config: cfg.clone(), shell_dir: d.join("shell"), rdwmctl, socket: d.join("no-such-rdwm.sock") };
         let q: Queue = Arc::new(Mutex::new(Default::default()));
         let m = Model::new(paths, Schema::snapshot(), q, Arc::new(|| {}));
         (m, cfg)

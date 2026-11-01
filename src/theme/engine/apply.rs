@@ -815,15 +815,11 @@ pub mod tests {
     use crate::theme::engine::archive::{Entry, Limits};
     use crate::theme::engine::package::{install_entries, tests::png};
 
-    pub fn sandbox(name: &str) -> (PathBuf, Source, Paths) {
-        let d = std::env::temp_dir().join(format!("decebal-apply-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(d.join("shell")).unwrap();
-        std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
-        // Capability-aware themes need an explicit target schema, never a live desktop probe.
-        // io::validate parses TOML before calling this syntax-only fake check-config endpoint.
+    /// A test-only `rdwmctl` that answers `schema --offline` with the bundled schema and accepts `check-config` (syntax already parsed by
+    /// `io::validate`), so capability-aware themes get an explicit offline target and never a live desktop probe. Any other command fails.
+    pub fn fixture_rdwmctl(dir: &Path) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
-        let ctl = d.join("fixture-rdwmctl");
+        let ctl = dir.join("fixture-rdwmctl");
         let schema = include_str!("../../settings/rdwm-schema.json");
         std::fs::write(
             &ctl,
@@ -831,6 +827,15 @@ pub mod tests {
         )
         .unwrap();
         std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o700)).unwrap();
+        ctl
+    }
+
+    pub fn sandbox(name: &str) -> (PathBuf, Source, Paths) {
+        let d = std::env::temp_dir().join(format!("decebal-apply-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("shell")).unwrap();
+        std::env::set_var("DECEBAL_SYSTEM_THEMES", d.join("nosystem"));
+        let ctl = fixture_rdwmctl(&d);
         let paths = Paths { rdwm_config: d.join("config.toml"), shell_dir: d.join("shell"), rdwmctl: ctl, socket: d.join("none.sock") };
         let src = Source { shell_json: paths.shell_json(), themes_dir: d.join("cfg/themes") };
         (d, src, paths)
