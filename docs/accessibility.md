@@ -247,7 +247,7 @@ search with no match keeps its own status and announcement ("No matching apps").
 Not covered: Windows paints two hints (no pinned apps; no recent apps) only when
 its Recommended block fits, a decision made from geometry private to that style, so
 Windows, GNOME and UKUI (which list every app and paint no such text) have no empty
-note. Source tests for all of this are written and have not been built or run.
+note. Source tests for these empty states passed in the qualified run recorded below; native assistive-technology acceptance remains pending.
 
 Validation correction: a shared Cargo target reused a different worktree's test
 executable and ran zero launcher tests. That run is explicitly invalidated in
@@ -258,6 +258,8 @@ root-crate fingerprints/incremental state, then compiled and executed 44 tests:
 non-mutating in the common validator, so a non-focusable background node correctly
 returns Unsupported rather than Disabled. The test now checks that refusal and
 that menu focus remains unchanged. Evidence from the failed qualified run is
-retained in `/var/tmp/decebal-launcher-a11y-qualified-tests/`. A fresh passing run
-is still required. Earlier shared-target compilation records are superseded by
+retained in `/var/tmp/decebal-launcher-a11y-qualified-tests/`. The dedicated-target retry at commit 26349ad executed all 44 launcher accessibility
+tests successfully (0 failures), including the named search-confirmation and
+empty-state regressions. Its source fingerprint stayed unchanged; evidence is in
+`/var/tmp/decebal-launcher-a11y-qualified-tests-retry1/result.json`. Earlier shared-target compilation records are superseded by
 this explicit-source/required-test-evidence process.
