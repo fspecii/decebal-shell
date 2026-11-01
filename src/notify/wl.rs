@@ -143,6 +143,9 @@ struct ShmBuf {
 
 impl ShmBuf {
     fn new(shm: &Shm, w: u32, h: u32) -> Result<Self, String> {
+        if w == 0 || h == 0 || super::present::alloc_bytes((w, h)) > super::present::MAX_BUFFER_BYTES {
+            return Err(format!("invalid notification buffer dimensions {w}x{h}"));
+        }
         let want = pool_len((w, h));
         let mut pool = SlotPool::new(want, shm).map_err(werr)?;
         let (buffer, _) = pool.create_buffer(w as i32, h as i32, w as i32 * 4, wl_shm::Format::Argb8888).map_err(werr)?;
@@ -438,6 +441,14 @@ impl WlHost {
         self.surfaces.iter().map(|s| s.pres.buffers.alloc_bytes()).sum::<usize>() + self.graveyard.iter().map(Entry::alloc_bytes).sum::<usize>()
     }
 
+    fn total_buffers(&self) -> usize {
+        self.surfaces.iter().map(|s| s.pres.buffers.len()).sum::<usize>() + self.graveyard.len()
+    }
+
+    fn allocation_budget(&self) -> usize {
+        super::present::remaining_budget(self.total_bytes(), self.total_buffers())
+    }
+
     /// The pool lengths the library reports, summed over every buffer (for the counters; compare with `total_bytes`).
     fn pool_bytes(&self) -> usize {
         self.surfaces.iter().flat_map(|s| s.pres.buffers.iter()).map(ShmBuf::reported_len).sum::<usize>() + self.graveyard.iter().map(|e| e.buf.reported_len()).sum::<usize>()
@@ -450,7 +461,9 @@ impl WlHost {
         for i in 0..self.surfaces.len() {
             self.present_surface(i, now);
         }
+        let retired_before = self.graveyard.len();
         self.graveyard.retain(|e| !e.buf.released());
+        self.debug_dirty |= self.graveyard.len() != retired_before;
         if self.debug_dirty {
             self.write_debug();
         }
@@ -485,8 +498,8 @@ impl WlHost {
             })
             .collect();
         let data = serde_json::json!({
-            "scale": self.scale.factor(), "surfaces": surfaces, "graveyard": self.graveyard.len(), "total_bytes": self.total_bytes(), "pool_bytes": self.pool_bytes(),
-            "limits": {"buffers": super::present::MAX_BUFFERS, "callbacks": super::present::MAX_CALLBACKS, "surface_bytes": super::present::MAX_SURFACE_BYTES, "page_bytes": super::present::PAGE_BYTES, "total_bytes": MAX_TOTAL_BYTES},
+            "scale": self.scale.factor(), "surfaces": surfaces, "graveyard": self.graveyard.len(), "total_bytes": self.total_bytes(), "pool_bytes": self.pool_bytes(), "total_buffers": self.total_buffers(),
+            "limits": {"buffers": super::present::MAX_BUFFERS, "callbacks": super::present::MAX_CALLBACKS, "surface_bytes": super::present::MAX_SURFACE_BYTES, "page_bytes": super::present::PAGE_BYTES, "total_bytes": MAX_TOTAL_BYTES, "total_buffers": super::present::MAX_TOTAL_BUFFERS},
             "totals": total.json(),
         });
         let _ = std::fs::write(path, data.to_string());
@@ -502,7 +515,7 @@ impl WlHost {
         let want_scale = self.scale;
         let m = self.layout_metrics();
         let inert = self.inert && self.surfaces[i].kind == Kind::Banner;
-        let budget_left = MAX_TOTAL_BYTES.saturating_sub(self.total_bytes());
+        let budget_left = self.allocation_budget();
         let s = &mut self.surfaces[i];
         s.deferred = false;
         let Some(layer) = s.layer.as_ref() else { return };
@@ -515,14 +528,14 @@ impl WlHost {
             return;
         }
         // buffers of an older size or scale go as soon as the compositor releases them, even with nothing to draw
-        s.pres.buffers.reap(Some(s.size));
+        self.debug_dirty |= s.pres.buffers.reap(Some(s.size)) > 0;
         let plan = s.pres.plan(now, s.size, budget_left, |pm| (pm.width(), pm.height()));
         match plan {
             Plan::Reuse(_) | Plan::New => {}
             Plan::Refused(why) => {
                 if !s.refusal_logged {
                     s.refusal_logged = true;
-                    let reason = if why == Refusal::Oversize { "larger than one buffer may be" } else { "past the shm memory budget" };
+                    let reason = if why == Refusal::Oversize { "larger than one buffer may be" } else { "past the shm memory or pool-count budget" };
                     crate::log_warn!("decnotify: a {}x{} frame is {reason}; the surface keeps its last frame", s.size.0, s.size.1);
                 }
                 self.debug_dirty = true;
@@ -632,7 +645,7 @@ impl WlHost {
     /// A catcher covers its output with one transparent buffer and takes input everywhere on it.
     fn present_catcher(&mut self, i: usize, now: Instant) {
         let viewporter = self.viewporter.is_some();
-        let budget_left = MAX_TOTAL_BYTES.saturating_sub(self.total_bytes());
+        let budget_left = self.allocation_budget();
         let s = &mut self.surfaces[i];
         s.deferred = false;
         let Some(layer) = s.layer.as_ref() else { return };

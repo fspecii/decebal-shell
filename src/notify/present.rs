@@ -34,6 +34,17 @@ pub const MAX_BUFFER_BYTES: usize = 16 << 20;
 pub const MAX_SURFACE_BYTES: usize = 32 << 20;
 /// All buffers of the daemon, including those of destroyed surfaces the compositor still holds, as [`alloc_bytes`].
 pub const MAX_TOTAL_BYTES: usize = 96 << 20;
+/// Pool/file-descriptor bound, including buffers retained by a non-releasing compositor.
+pub const MAX_TOTAL_BUFFERS: usize = 64;
+
+/// A zero allocation budget still permits reuse of already-owned released buffers.
+pub fn remaining_budget(bytes: usize, buffers: usize) -> usize {
+    if buffers >= MAX_TOTAL_BUFFERS {
+        0
+    } else {
+        MAX_TOTAL_BYTES.saturating_sub(bytes)
+    }
+}
 /// Granularity the shm file behind a pool is backed at. 4 KiB is the smallest page size Linux runs with; a kernel
 /// with bigger pages backs a little more than [`alloc_bytes`] says (at most one page per buffer).
 pub const PAGE_BYTES: usize = 4096;
@@ -726,6 +737,17 @@ mod tests {
         assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER), None);
         pacer.busy(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1));
         assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1)), Some(BUSY_RETRY));
+    }
+
+    #[test]
+    fn retained_pools_limit_new_descriptors_but_existing_buffers_can_be_reused() {
+        assert_eq!(remaining_budget(0, MAX_TOTAL_BUFFERS), 0);
+        assert_eq!(remaining_budget(0, MAX_TOTAL_BUFFERS + 1), 0);
+        assert_eq!(remaining_budget(4096, MAX_TOTAL_BUFFERS - 1), MAX_TOTAL_BYTES - 4096);
+        let mut set = BufferSet::default();
+        set.insert(Fake(Rc::new(Cell::new(true))), (1, 1));
+        assert_eq!(set.pick((1, 1), remaining_budget(4096, MAX_TOTAL_BUFFERS)), Pick::Reuse(0));
+        assert_eq!(BufferSet::<Fake>::default().pick((1, 1), remaining_budget(4096, MAX_TOTAL_BUFFERS)), Pick::Refused(Refusal::Budget));
     }
 
     #[test]
