@@ -102,3 +102,18 @@ preservation, icon A→B refresh including negative-cache recovery, image hints 
 banner identity/deadline preservation. The first interrupted attempt stays failed.
 This does not qualify the separate X11 storage/history workflow, an optimized
 binary or a physical desktop.
+
+
+The owned X11 storage/history workflow also passed independently:
+`/var/tmp/decebal-notify-x11-history-qualified/result.json` (18.58 seconds,
+fixture `0233b85`, same development daemon). Real EACCES warning/Retry, failed
+D-Bus and native Clear preserving durable bytes, transient exclusion, restart
+restoration, symlink/corrupt/unreadable preservation, merge/rekey and content-free
+diagnostics all passed. Cleanup recorded no forced kills, failures or interruption.
+The WM was a frozen older artifact (SHA256
+`e4980f9eeb9cdc28962721d036a902cf2cc9669a89c9e6407b9e5187978f15ee`),
+used only as the private fixture environment. This qualifies neither the latest
+WM nor an optimized notification daemon. Together with the fresh X11 theme gate
+and the complete 12-phase Wayland development run, this closes the planned
+**development-binary** notification transport gates; optimized/full-suite and
+physical hardware acceptance remain open.
