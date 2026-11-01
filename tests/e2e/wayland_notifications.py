@@ -703,13 +703,22 @@ def phase_history(rig):
     invoked_before = len(actions_invoked(rig.signals()))
     # HEADLESS-1 is 1280x720 logical at (0,0) and holds the panel top-right; HEADLESS-2 starts at x=1280
     for case, closer in (("escape", "key"), ("outside-same-output", (100, 600)), ("outside-other-output", (2000, 500))):
+        trace_at = len(rig.trace())
         destroyed = trace_count(rig.trace(), "zwlr_layer_surface_v1", "destroy")
         rig.cli("history", "show")
-        panel = rig.settle(lambda: rig.history(), "history panel open")
+        def panel_ready():
+            h, p = rig.history(), rig.present()
+            if not h or not p:
+                return None
+            live = p["surfaces"]
+            panel = any(s["id"] == h["window"] and s["kind"] == "Panel" and s["configured"] and s["buffers"] > 0 for s in live)
+            catchers = sum(s["kind"] == "Catcher" and s["configured"] and s["buffers"] > 0 for s in live)
+            return h if panel and catchers == 2 else None
+        panel = rig.settle(panel_ready, f"{case}: current panel and both catchers committed")
         rig.settle(lambda: not rig.banners()["active"] and not rig.banners()["queued"], f"{case}: opening history dismissed the banners and the queue")
         reasons = closed_reasons(rig.signals())
         rig.check(all(reasons.get(i) in (2, 1, 3) for i in ids), f"{case}: dismissed banners have no close reason")
-        rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.enter", rig.trace()), f"{case}: the panel received the keyboard")
+        rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.enter", rig.trace()[trace_at:]), f"{case}: the new panel received the keyboard")
         rig.evidence[f"history_{case}"] = check_history_contract(rig.trace(), 2, rig.failures)
         if closer == "key":
             for keys in (["-k", "Tab"], ["-M", "shift", "-k", "Tab", "-m", "shift"], ["-k", "Tab"], ["-k", "Return"]):
@@ -719,6 +728,7 @@ def phase_history(rig):
         else:
             rig.click(*closer)
         rig.settle(lambda: trace_count(rig.trace(), "zwlr_layer_surface_v1", "destroy") >= destroyed + 3, f"{case}: the panel and both catchers were destroyed")
+        rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.leave", rig.trace()[trace_at:]), f"{case}: the closed panel released the keyboard")
         mark = rig.sink_bytes()
         rig.type(f"{case[0]}")
         rig.settle(lambda: rig.sink_bytes() != mark, f"{case}: the keyboard returned to the sink without refocusing it")
