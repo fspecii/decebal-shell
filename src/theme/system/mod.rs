@@ -745,14 +745,14 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
     }
 }
 
-/// The system configuration as the targets see it: an explicit `system.iconTheme` wins, otherwise the theme's shell icon pack
-/// (`icons.theme`) is carried to apps too.
+/// The policy-owned icon slot drives shell and toolkit apps together. Preserve a legacy app-only
+/// override only until the user or a theme has taken ownership through the shared policy.
 fn effective_config(shell_json: &Path) -> Config {
     let mut cfg = Config::load(shell_json);
-    if cfg.icon_theme.is_none() {
-        // "auto" follows the desktop's own setting: no named theme to publish.
-        cfg.icon_theme =
-            crate::settings::io::json_load(shell_json).get("icons").and_then(|i| i.get("theme")).and_then(Value::as_str).filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("auto")).map(String::from);
+    let doc = crate::settings::io::json_load(shell_json);
+    let owned = doc.get("asset_packs").and_then(|a| a.get("icons")).is_some();
+    if owned || cfg.icon_theme.is_none() {
+        cfg.icon_theme = crate::desktop_assets::policy::current(&doc, crate::desktop_assets::Provides::Icons);
     }
     cfg
 }
@@ -1356,6 +1356,18 @@ pub mod testutil {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn policy_owned_icons_reach_apps_including_an_explicit_automatic_choice() {
+        let dir = super::testutil::tmp("icon-slot-authority");
+        let path = dir.as_ref().join("decebal.json");
+        for (slot, mode, expected) in [("Bloom", "follow", Some("Bloom")), ("Custom", "custom", Some("Custom")), ("auto", "custom", None)] {
+            let doc = serde_json::json!({"system":{"iconTheme":"stale"}, "icons":{"theme":slot}, "asset_packs":{"icons":{"mode":mode}}});
+            std::fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
+            assert_eq!(super::effective_config(&path).icon_theme.as_deref(), expected);
+        }
+        std::fs::write(&path, br#"{"system":{"iconTheme":"Legacy"}}"#).unwrap();
+        assert_eq!(super::effective_config(&path).icon_theme.as_deref(), Some("Legacy"));
+    }
     use super::testutil::*;
     use super::*;
 

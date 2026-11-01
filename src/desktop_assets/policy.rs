@@ -131,6 +131,10 @@ pub fn set_current(doc: &mut Value, k: Provides, v: Option<&str>) {
     match k {
         Provides::Icons => {
             obj(doc, "icons").insert("theme".into(), json!(v.unwrap_or("auto")));
+            // One icon choice drives both shell and toolkit apps. Retire the older second authority.
+            if let Some(system) = doc.get_mut("system").and_then(Value::as_object_mut) {
+                system.remove("iconTheme");
+            }
         }
         Provides::Cursors => match v {
             Some(v) => {
@@ -353,6 +357,11 @@ pub fn choose(doc: &mut Value, k: Provides, c: &Choice) {
             put_state(doc, k, &fresh);
         }
     }
+    if k == Provides::Icons {
+        if let Some(system) = doc.get_mut("system").and_then(Value::as_object_mut) {
+            system.remove("iconTheme");
+        }
+    }
     bump(doc);
 }
 
@@ -509,6 +518,27 @@ mod tests {
 
     fn rec(theme: &str, icons: Option<&str>, cursors: Option<&str>) -> Recommendation {
         Recommendation { theme: theme.into(), icons: icons.map(String::from), cursors: cursors.map(String::from), ..Default::default() }
+    }
+
+    #[test]
+    fn icon_choices_and_theme_following_retire_the_legacy_app_only_override() {
+        let mut doc = json!({"system":{"iconTheme":"OldPapirus","enabled":true},"icons":{"theme":"Adwaita"}});
+        apply_theme(&mut doc, &rec("deepin", Some("bloom"), None));
+        assert_eq!(current(&doc, Provides::Icons).as_deref(), Some("bloom"));
+        assert!(doc["system"].get("iconTheme").is_none());
+        assert_eq!(doc["system"]["enabled"], true);
+        doc["system"]["iconTheme"] = json!("stale");
+        choose(&mut doc, Provides::Icons, &Choice::Name("CustomIcons".into()));
+        assert!(doc["system"].get("iconTheme").is_none());
+        assert_eq!(owner(&doc, Provides::Icons), Owner::User);
+        apply_theme(&mut doc, &rec("lingmo", Some("ocean"), None));
+        assert_eq!(current(&doc, Provides::Icons).as_deref(), Some("CustomIcons"));
+        choose(&mut doc, Provides::Icons, &Choice::Auto);
+        assert_eq!(current(&doc, Provides::Icons), None);
+        assert!(doc["system"].get("iconTheme").is_none());
+        let mut no_recommendation = json!({"system":{"iconTheme":"stale"},"icons":{"theme":"Adwaita"}});
+        choose(&mut no_recommendation, Provides::Icons, &Choice::Theme);
+        assert!(no_recommendation["system"].get("iconTheme").is_none());
     }
 
     #[test]

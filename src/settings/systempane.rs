@@ -164,8 +164,10 @@ pub fn apply(m: &mut Model, parts: &[&str], v: CtlVal) {
             });
         }
         (["sy", "icon"], CtlVal::Str(s)) => {
-            cfg.icon_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());
-            save_then(m, &cfg, request);
+            let name = s.trim().to_string();
+            let pick = if name.is_empty() { crate::desktop_assets::policy::Choice::Auto } else { crate::desktop_assets::policy::Choice::Name(name.clone()) };
+            let said = format!("Icon theme for apps: {}", if name.is_empty() { "not set" } else { &name });
+            m.edit_shell_doc("system-icons", move |doc| crate::desktop_assets::policy::choose(doc, crate::desktop_assets::Provides::Icons, &pick), said, Some(Box::new(request)));
         }
         (["sy", "cursor"], CtlVal::Str(s)) => {
             cfg.cursor_theme = Some(s.trim().to_string()).filter(|s| !s.is_empty());

@@ -502,3 +502,19 @@ Open Settings processes/drafts and desktop daemons were preserved; newly opened
 Settings uses this release. The rest of the shell remains the previously
 qualified a82 runtime. This is isolated X11 release acceptance, not physical
 hardware, Wayland, Qt live-update or full desktop-replica proof.
+
+### Shared icon ownership repair (source candidate, 2026-11-01)
+
+The app icon-theme field now uses the same asset policy as the Icons pane. A
+named choice is custom for both shell and apps; clearing it is an explicit
+automatic choice. Following a theme returns ownership to its recommendation.
+Any new icon-policy write retires the legacy `system.iconTheme` field. Existing
+policy-owned slots also override a leftover legacy value when planning toolkit
+updates, including an explicit automatic slot. An untouched legacy-only config
+keeps its old app-only choice until a policy choice or theme recommendation
+replaces it. Other system keys remain intact.
+
+Regression tests cover theme following over a stale legacy override, custom
+choices surviving a theme switch, automatic selection, and legacy-only
+compatibility. The source is formatted; compilation and execution of these new
+tests are pending. No live configuration migration was performed.
