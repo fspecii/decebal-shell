@@ -332,3 +332,20 @@ Checkpoint `/var/tmp/decebal-notification-native-checkpoint-20261102.json` recor
 8 distinct qualified selected phases across matched dev-binary runs. Themes,
 scale/output cases, burst and explicit output pinning remain pending, along with
 optimized/X11/visual/hardware acceptance. This is not full transport acceptance.
+
+Remaining dev-native phases passed in `/var/tmp/dn-native-10/result.json`:
+retheme generation changes preserve all requested ids/deadlines, live scale ratios
+and action hit alignment match 100/150/200%, adding an output remains usable,
+delivered pointer/key bursts coalesce within buffer/callback limits, and explicit
+output selection requests HEADLESS-2. Scale validation follows live surface
+lifetimes and checks actual pixel/logical extents, including the valid viewport
+path at integer scales. Burst evidence records 599 delivered motions and 300 raw
+key events; these are not zero-input timing assertions. Readiness adapts to the
+third hotplugged output. Twenty fixture-helper tests pass.
+`/var/tmp/dn-native-11/result.json` additionally verifies compositor surface-entry
+on HEADLESS-2 while HEADLESS-1 is focused, not only the requested output id.
+Both runs use the same pinned dev binary, stable production fingerprints and clean
+owned cleanup; no forced/rescue stops or resource abort.
+The checkpoint now records all 12 selected phase names across matched development
+runs. It still does not prove one complete optimized matrix, X11 regression,
+strict lint/full suite, rendered fidelity or physical hardware; the PR stays draft.
