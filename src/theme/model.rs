@@ -700,7 +700,8 @@ impl Def {
                 .map(|s| s == "right")
                 .or_else(|| {
                     let decoration = self.extra.get("decoration")?;
-                    let style = decoration.get(if dark { "style_dark" } else { "style_light" }).or_else(|| decoration.get("style"))?.as_str()?;
+                    let style_key = |key| decoration.get(key).and_then(serde_json::Value::as_str).filter(|style| super::engine::decoration_compat::valid_id(style));
+                    let style = style_key(if dark { "style_dark" } else { "style_light" }).or_else(|| style_key("style"))?;
                     crate::settings::decorations::buttons_right(style)
                 })
                 .unwrap_or_else(|| matches!(get("titlebar_style"),Some(V::S(s)) if s=="classic")),
@@ -1257,6 +1258,16 @@ mod tests {
 #[cfg(test)]
 mod button_side_tests {
     use super::*;
+
+    #[test]
+    fn invalid_mode_style_uses_the_valid_base_button_side_like_the_wm_contract() {
+        for invalid in [serde_json::json!(42), serde_json::json!("bad style")] {
+            let mut def = Def::parse(MINI).unwrap();
+            def.extra.insert("decoration".into(), serde_json::json!({"style":"classic","style_dark":invalid}));
+            assert!(def.resolve("mini", true, &Selection::default()).window_buttons_right);
+            assert_eq!(crate::theme::engine::decoration_compat::wanted(&def.extra, true).unwrap().desired, "classic");
+        }
+    }
 
     #[test]
     fn every_native_style_drives_toolkit_button_side_in_both_modes() {

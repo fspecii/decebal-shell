@@ -110,6 +110,11 @@ const LIFTED: &[(&str, &str, &str)] = &[
 ];
 
 fn minimum_shell_version(def: &Def) -> &'static str {
+    let native_launcher = |style: &str| crate::launcher::style::KEYS.contains(&style) && !matches!(style, "default" | "dux");
+    let native_launcher_tokens =
+        std::iter::once(&def.common).chain(def.dark.iter()).chain(def.light.iter()).any(|tokens| matches!(tokens.get("launcher_style"), Some(V::S(value)) if native_launcher(value)));
+    let native_launcher_extra = def.extra.get("launcher").and_then(|v| v.get("style")).and_then(Value::as_str).is_some_and(native_launcher);
+
     let modern_style = std::iter::once(&def.common)
         .chain(def.dark.iter())
         .chain(def.light.iter())
@@ -117,7 +122,7 @@ fn minimum_shell_version(def: &Def) -> &'static str {
     let modern_extra = ["bar", "dashboard", "launcher", "control_center"].iter().any(|section| def.extra.get(*section).and_then(|v| v.get("style")).and_then(Value::as_str) == Some("dux"))
         || def.extra.get("font").and_then(|v| v.get("files")).and_then(Value::as_array).is_some_and(|a| !a.is_empty())
         || def.extra.get("desktop").and_then(|v| v.get("widgets")).and_then(Value::as_str) == Some("none");
-    if crate::panel::needs_framework(&def.extra) || super::decoration_compat::needs_framework(&def.extra) {
+    if native_launcher_tokens || native_launcher_extra || crate::panel::needs_framework(&def.extra) || super::decoration_compat::needs_framework(&def.extra) {
         crate::panel::SINCE
     } else if modern_style || modern_extra {
         "0.2.0"
@@ -264,6 +269,19 @@ mod tests {
         let output = def_to_manifest(&classic, &header);
         assert!(output.contains("min_shell_version = \"0.2.0\""));
         assert!(manifest::analyze(&output).def.is_some());
+    }
+
+    #[test]
+    fn native_launcher_exports_require_the_framework_for_tokens_and_sections() {
+        for style in crate::launcher::style::KEYS.iter().filter(|style| !matches!(**style, "default" | "dux")) {
+            let mut def = crate::theme::builtin::def("macos").unwrap();
+            def.common.insert("launcher_style".into(), V::S((*style).into()));
+            assert_eq!(minimum_shell_version(&def), "0.3.0", "{style} token");
+            def.common.remove("launcher_style");
+            def.extra.insert("launcher".into(), serde_json::json!({"style":style}));
+            assert_eq!(minimum_shell_version(&def), "0.3.0", "{style} section");
+            assert_eq!(round(&def).resolve("x", true, &Selection::default()).launcher_style, *style);
+        }
     }
 
     #[test]

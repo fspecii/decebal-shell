@@ -1168,7 +1168,7 @@ pub enum Publication {
 /// `[Appearance] icon_theme`.
 ///
 /// * Explicit opt-outs win: `system.enabled = false` (unset means on), or the `gtk` and `qt` targets switched off, publish nothing.
-///   An explicit `system.iconTheme` keeps winning over the theme's `icons.theme`. A theme that is not installed is not published.
+///   Policy-owned `icons.theme` drives app icons; an untouched legacy app-only override is honored until migrated as a custom choice. A theme that is not installed is not published.
 /// * Ordering: see the request ownership protocol above. A pending theme apply keeps its full intent; the worker publishes the
 ///   selection of exactly `shell_json` current when it claims its ticket.
 pub fn publish_assets(shell_json: &Path) -> Publication {
