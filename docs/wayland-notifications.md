@@ -63,6 +63,12 @@ Per banner or panel surface (`notify/present.rs`):
   is reused only when released; a size or scale change that finds all three held waits for a release instead of
   allocating; a released buffer of another size is destroyed at once (`BufferSet::reap`). SCTK's `SlotPool` retains an
   active buffer whose handle is dropped, so no active buffer is ever dropped: the handles are kept in the set.
+* **every buffer owns its own shm pool**, created at exactly the size of its slot (`present::pool_len`: the pixels
+  rounded up to SCTK's 64-byte slot alignment). There is no shared `SlotPool`: that one never shrinks and at least
+  doubles when no free run fits, so after card-size churn its length was not bounded by the live buffers. A pool
+  cannot grow or fragment, `ShmBuf::new` refuses a buffer whose pool length is not exactly the requested one, and
+  dropping a released buffer destroys its `wl_shm_pool` and unmaps the memory at once (no idle "shrink" step).
+  The price is one memfd, mmap and `wl_shm.create_pool` per *new* buffer; reuse of a released buffer costs none.
 * the frame is attached together with its size, scale/viewport, margins and **input region**, and asks for a **frame
   callback**; the next frame waits for it. The fallback is `FRAME_STALL` (1 s): after that a frame goes out anyway, never
   more than `MAX_CALLBACKS` (2) callbacks are outstanding, and past that commits proceed without asking for more.
@@ -70,15 +76,20 @@ Per banner or panel surface (`notify/present.rs`):
   timeout (`WlHost::next_wake`, never below 1 ms); releases and callbacks wake the loop sooner. Nothing spins.
 * the input region and margins stay those of the **last committed frame** until a new frame is attached; a margin-only
   change (a banner above closed) is sent without a repaint when size and scale are unchanged.
-* budgets: 16 MiB per buffer, 32 MiB per surface, 96 MiB for the daemon, **including** the *graveyard* (buffers of
+* budgets: 16 MiB per buffer, 32 MiB per surface, 96 MiB for the daemon, counted as `present::alloc_bytes` (the pool
+  rounded up to 4 KiB pages, so a 1x1 catcher counts a page, not 4 bytes), **including** the *graveyard* (buffers of
   destroyed or parked surfaces the compositor still holds, dropped the moment they are released). A refused allocation
   is logged once per episode (`log_warn`) and counted; the surface keeps its last frame. A failed shm allocation is
   logged and retried on the schedule above. Normal cards are card-sized (about 0.1-4 MiB); nothing is output-sized.
   A catcher keeps its single transparent buffer (1x1 with a viewport) and is not repainted.
-* when no buffer is left anywhere, a pool that grew past 1 MiB is replaced by a small one.
+* the accounted bytes are the sum of the live pools, so the budget bounds what the daemon *allocates* in shm for
+  notifications. It is not a measured RSS guarantee: each pool is also mapped by the compositor, malloc/font/theme
+  memory is separate, and a kernel with pages bigger than 4 KiB backs at most one extra page per buffer.
 
 `DECNOTIFY_DEBUG_WAYLAND=FILE` writes the counters (per surface and totals: buffers and bytes held, created/reused,
-commits, coalesced, busy, stale, refused, callbacks requested/done, maxima, graveyard, pool size, limits) for the fixture.
+commits, coalesced, busy, stale, refused, callbacks requested/done, maxima, graveyard, limits) for the fixture.
+`total_bytes` is the page-rounded budget figure; `pool_bytes` is the sum of the pool lengths SCTK reports, which must
+stay at or below it (the fixture checks this), and `alloc_bytes` per surface is checked against the surface limit.
 
 ## Environment
 
@@ -105,7 +116,8 @@ wheel pan then scroll, hover, relayout bounds. `geom.rs`: fit/logical idempotenc
 inset policy, margins, input-region conversion, transparent catcher plan, wheel accumulation, key repeat, output pick.
 `present.rs`: latest-frame-only coalescing, frame-callback wait and the stall fallback, the callback bound, delayed
 releases never passing 3 buffers, busy retry back-off (no zero-length sleeps), size and scale churn staying bounded with
-old-size buffers counted, stale frames dropped, oversize and budget refusals, reuse only of released same-size buffers.
+old-size buffers counted, stale frames dropped, oversize and budget refusals, reuse only of released same-size buffers,
+exact pool length and page-rounded budget arithmetic, and a live-plus-retired accounting churn staying under the budgets.
 `tests/wayland-notification-fixture.py`: parsers of the native fixture.
 
 ## Native fixture (draft, not run)
@@ -119,7 +131,7 @@ other-output outside clicks, keyboard hand-back, no action replay), `persistence
 card, Retry click), `dnd` (and a recording `canberra-gtk-play`), `themes`, `scales` (2, 1, 1.5 and an output added),
 `burst` (600 pointer motions in one IPC call and 150 Tab presses: far fewer commits, buffers and callbacks within
 the bounds on the wire and in the daemon's counters), `churn` (batched scale changes with banners and the panel up,
-then everything closed: no surfaces, no held buffers, small pool, bounded RSS growth), `pinned`.
+then everything closed: no surfaces, no held buffers, `pool_bytes` 0, bounded RSS growth), `pinned`.
 
 ## Known limits (honest list)
 
@@ -196,7 +208,13 @@ without pretending they requested a frame callback. A pure pacing regression
 covers resetting from 250 ms back to the initial retry. Native allocation-fault
 and catcher-path evidence remains pending.
 
-Budget precision: the 96 MiB limit describes logical live/retired buffer bytes,
-not a hard SlotPool mmap/RSS ceiling. Pool growth/fragmentation can exceed that
-sum before the idle shrink. `pool_bytes` needs a separate churn bound and native
-measurement before claiming bounded daemon RSS under arbitrary resize churn.
+Budget precision (superseded by the per-buffer pools above, source only): the
+96 MiB limit used to describe logical live/retired buffer bytes while one shared
+`SlotPool` could grow and fragment past that sum. Each buffer now owns an
+exact-size pool and the budgets count those pools' page-rounded sizes, so the
+limit bounds the actual notification shm allocation, not just pixels. Pure tests
+cover the size arithmetic, budget refusals and an accounting churn model; they
+cannot show that SCTK leaves a pool untouched (the runtime length check is what
+guards that) or measure RSS. Pending: compile, the focused `present.rs` run, and
+a native resize/scale churn run reading `pool_bytes` against `total_bytes` and
+the process's mapped shm.

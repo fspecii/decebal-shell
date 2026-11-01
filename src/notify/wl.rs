@@ -17,7 +17,7 @@
 use super::geom::{button_of, effective_scale, logical_output_size, logical_rects, margins, pick_output, transparent_plan, wayland_metrics, BarFacts, InsetPolicy, KeyRepeat, Scale, ScrollAccum};
 use super::history::{history_dimensions, HistOutcome, HistWin};
 use super::model::Notification;
-use super::present::{Entry, Pick, Plan, Presenter, Refusal, Releasable, Stats, MAX_TOTAL_BYTES};
+use super::present::{pool_len, Entry, Pick, Plan, Presenter, Refusal, Releasable, Stats, MAX_TOTAL_BYTES};
 use super::view::{opaque_rects, Banner, BannerLayout, Btn, Host, Metrics, Render, Stack, ThemeWake};
 use super::{Frontend, Shared, UiEvent, Wake};
 use crate::backend::{poll_readable, poll_writable};
@@ -43,7 +43,7 @@ use smithay_client_toolkit::{
         WaylandSurface,
     },
     shm::{
-        slot::{Buffer, SlotPool},
+        slot::{ActivateSlotError, Buffer, SlotPool},
         Shm, ShmHandler,
     },
 };
@@ -100,7 +100,7 @@ struct Surf {
     /// Device size of the buffer last attached (the margins and the input region belong to it).
     committed_size: Option<(u32, u32)>,
     /// The latest painted frame, this surface's bounded buffers and its frame pacing.
-    pres: Presenter<Buffer, Pixmap>,
+    pres: Presenter<ShmBuf, Pixmap>,
     /// Input outline of the last committed frame, in device pixels.
     shape: Vec<(i32, i32, u32, u32)>,
     region_dirty: bool,
@@ -128,9 +128,49 @@ impl Surf {
     }
 }
 
-impl Releasable for Buffer {
+/// One reusable shm buffer that owns its own pool, created at exactly the size of its slot ([`pool_len`]).
+///
+/// A shared `SlotPool` only ever grows (it at least doubles when no free run fits) and a retained buffer pins its
+/// slot, so after size churn its length is not bounded by the live buffers. A pool per buffer cannot grow or
+/// fragment: its length is fixed at creation, and dropping the buffer (only once the compositor released it, see
+/// `BufferSet::reap` and the graveyard) unmaps and destroys the whole pool.
+#[derive(Debug)]
+struct ShmBuf {
+    // `buffer` first: it is dropped (destroyed) before the pool that backs it.
+    buffer: Buffer,
+    pool: SlotPool,
+}
+
+impl ShmBuf {
+    fn new(shm: &Shm, w: u32, h: u32) -> Result<Self, String> {
+        let want = pool_len((w, h));
+        let mut pool = SlotPool::new(want, shm).map_err(werr)?;
+        let (buffer, _) = pool.create_buffer(w as i32, h as i32, w as i32 * 4, wl_shm::Format::Argb8888).map_err(werr)?;
+        // The library must have carved the slot out of the pool as created. A pool that grew would break the bound.
+        if pool.len() != want {
+            return Err(format!("shm pool is {} bytes, expected exactly {want}", pool.len()));
+        }
+        Ok(ShmBuf { buffer, pool })
+    }
+
+    /// The pixels, while the compositor does not hold the buffer.
+    fn canvas(&mut self) -> Option<&mut [u8]> {
+        self.buffer.canvas(&mut self.pool)
+    }
+
+    fn attach_to(&self, surface: &wl_surface::WlSurface) -> Result<(), ActivateSlotError> {
+        self.buffer.attach_to(surface)
+    }
+
+    /// The length of the shm pool as the library reports it (what the memory budget models).
+    fn reported_len(&self) -> usize {
+        self.pool.len()
+    }
+}
+
+impl Releasable for ShmBuf {
     fn released(&self) -> bool {
-        !self.slot().has_active_buffers()
+        !self.buffer.slot().has_active_buffers()
     }
 }
 
@@ -173,9 +213,6 @@ fn send_geometry(layer: &LayerSurface, viewport: Option<&WpViewport>, sent: &mut
     changed
 }
 
-/// Shm memory the pool keeps once no buffer is left anywhere (a bigger pool is replaced by a small one).
-const POOL_KEEP: usize = 1 << 20;
-
 /// An explicit region: empty with no rectangles.
 fn set_region(compositor: &CompositorState, surface: &wl_surface::WlSurface, rects: &[(i32, i32, i32, i32)]) {
     if let Ok(region) = Region::new(compositor) {
@@ -210,7 +247,6 @@ struct WlHost {
     compositor: CompositorState,
     layer_shell: LayerShell,
     shm: Shm,
-    pool: SlotPool,
     output_state: OutputState,
     viewporter: Option<WpViewporter>,
     fractional_manager: Option<WpFractionalScaleManagerV1>,
@@ -235,7 +271,7 @@ struct WlHost {
     catchers_wanted: bool,
     /// Buffers of destroyed or parked surfaces the compositor has not released yet. They still count against the
     /// byte budget and are dropped (destroyed) the moment they are released.
-    graveyard: Vec<Entry<Buffer>>,
+    graveyard: Vec<Entry<ShmBuf>>,
     /// The totals of surfaces that no longer exist.
     gone: Stats,
     /// `DECNOTIFY_DEBUG_WAYLAND`: where to write the presentation counters.
@@ -396,9 +432,15 @@ impl WlHost {
         }
     }
 
-    /// Every byte of shm memory in use: live surfaces plus buffers the compositor still holds of gone ones.
+    /// Every byte of shm memory in use, as the page-rounded pool of each buffer: live surfaces plus buffers the
+    /// compositor still holds of gone ones.
     fn total_bytes(&self) -> usize {
-        self.surfaces.iter().map(|s| s.pres.buffers.bytes()).sum::<usize>() + self.graveyard.iter().map(Entry::bytes).sum::<usize>()
+        self.surfaces.iter().map(|s| s.pres.buffers.alloc_bytes()).sum::<usize>() + self.graveyard.iter().map(Entry::alloc_bytes).sum::<usize>()
+    }
+
+    /// The pool lengths the library reports, summed over every buffer (for the counters; compare with `total_bytes`).
+    fn pool_bytes(&self) -> usize {
+        self.surfaces.iter().flat_map(|s| s.pres.buffers.iter()).map(ShmBuf::reported_len).sum::<usize>() + self.graveyard.iter().map(|e| e.buf.reported_len()).sum::<usize>()
     }
 
     /// Commits whatever is ready, once per event-loop iteration: a banner's or the panel's latest frame (when its frame
@@ -409,7 +451,6 @@ impl WlHost {
             self.present_surface(i, now);
         }
         self.graveyard.retain(|e| !e.buf.released());
-        self.shrink_pool();
         if self.debug_dirty {
             self.write_debug();
         }
@@ -428,15 +469,6 @@ impl WlHost {
         }
     }
 
-    /// With no buffer left anywhere the pool, which only ever grows, is replaced by a small one.
-    fn shrink_pool(&mut self) {
-        if self.pool.len() > POOL_KEEP && self.graveyard.is_empty() && self.surfaces.iter().all(|s| s.pres.buffers.is_empty()) {
-            if let Ok(pool) = SlotPool::new(64 * 1024, &self.shm) {
-                self.pool = pool;
-            }
-        }
-    }
-
     fn write_debug(&mut self) {
         self.debug_dirty = false;
         let Some(path) = &self.debug_path else { return };
@@ -447,14 +479,14 @@ impl WlHost {
             .map(|s| {
                 total.merge(&s.pres.stats);
                 serde_json::json!({
-                    "id": s.id, "kind": format!("{:?}", s.kind), "configured": s.configured, "buffers": s.pres.buffers.len(), "bytes": s.pres.buffers.bytes(),
+                    "id": s.id, "kind": format!("{:?}", s.kind), "configured": s.configured, "buffers": s.pres.buffers.len(), "bytes": s.pres.buffers.bytes(), "alloc_bytes": s.pres.buffers.alloc_bytes(),
                     "callbacks_outstanding": s.pres.pacer.outstanding(), "frame_pending": s.pres.frame.is_some(), "stats": s.pres.stats.json(),
                 })
             })
             .collect();
         let data = serde_json::json!({
-            "scale": self.scale.factor(), "surfaces": surfaces, "graveyard": self.graveyard.len(), "total_bytes": self.total_bytes(), "pool_bytes": self.pool.len(),
-            "limits": {"buffers": super::present::MAX_BUFFERS, "callbacks": super::present::MAX_CALLBACKS, "surface_bytes": super::present::MAX_SURFACE_BYTES, "total_bytes": MAX_TOTAL_BYTES},
+            "scale": self.scale.factor(), "surfaces": surfaces, "graveyard": self.graveyard.len(), "total_bytes": self.total_bytes(), "pool_bytes": self.pool_bytes(),
+            "limits": {"buffers": super::present::MAX_BUFFERS, "callbacks": super::present::MAX_CALLBACKS, "surface_bytes": super::present::MAX_SURFACE_BYTES, "page_bytes": super::present::PAGE_BYTES, "total_bytes": MAX_TOTAL_BYTES},
             "totals": total.json(),
         });
         let _ = std::fs::write(path, data.to_string());
@@ -537,20 +569,23 @@ impl WlHost {
         let pm;
         match plan {
             Plan::Reuse(k) => {
-                let Some(canvas) = s.pres.buffers.get(k).canvas(&mut self.pool) else {
+                let Some(canvas) = s.pres.buffers.get_mut(k).canvas() else {
                     s.pres.pacer.busy(now);
                     s.deferred = true;
                     return;
                 };
-                let Some(frame) = s.pres.take() else { return };
+                // `frame` and `buffers` are separate fields: the canvas borrows only the buffer
+                let Some(frame) = s.pres.frame.take() else { return };
                 copy_argb(frame.data(), canvas);
                 pm = frame;
                 idx = k;
             }
-            _ => match self.pool.create_buffer(w as i32, h as i32, w as i32 * 4, wl_shm::Format::Argb8888) {
-                Ok((buffer, canvas)) => {
+            _ => match ShmBuf::new(&self.shm, w, h) {
+                Ok(mut buffer) => {
                     let Some(frame) = s.pres.take() else { return };
-                    copy_argb(frame.data(), canvas);
+                    if let Some(canvas) = buffer.canvas() {
+                        copy_argb(frame.data(), canvas);
+                    }
                     pm = frame;
                     idx = s.pres.insert(buffer, size);
                 }
@@ -614,7 +649,7 @@ impl WlHost {
             }
             let idx = match s.pres.buffers.pick(size, budget_left) {
                 Pick::Reuse(k) => {
-                    let Some(canvas) = s.pres.buffers.get(k).canvas(&mut self.pool) else {
+                    let Some(canvas) = s.pres.buffers.get_mut(k).canvas() else {
                         s.pres.pacer.busy(now);
                         s.deferred = true;
                         return;
@@ -622,9 +657,11 @@ impl WlHost {
                     canvas.fill(0);
                     k
                 }
-                Pick::New => match self.pool.create_buffer(bw as i32, bh as i32, bw as i32 * 4, wl_shm::Format::Argb8888) {
-                    Ok((buffer, canvas)) => {
-                        canvas.fill(0);
+                Pick::New => match ShmBuf::new(&self.shm, bw, bh) {
+                    Ok(mut buffer) => {
+                        if let Some(canvas) = buffer.canvas() {
+                            canvas.fill(0);
+                        }
                         s.pres.insert(buffer, size)
                     }
                     Err(e) => {
@@ -882,14 +919,12 @@ impl WlUi {
         let shm = Shm::bind(&globals, &qh).map_err(|e| format!("wl_shm: {e}"))?;
         let viewporter = globals.bind::<WpViewporter, _, _>(&qh, 1..=1, ()).ok();
         let fractional_manager = viewporter.as_ref().and_then(|_| globals.bind::<WpFractionalScaleManagerV1, _, _>(&qh, 1..=1, ()).ok());
-        let pool = SlotPool::new(64 * 1024, &shm).map_err(werr)?;
         let theme = ThemeWake::start()?;
         let theme_generation = crate::theme::live::generation();
         let host = WlHost {
             compositor,
             layer_shell,
             shm,
-            pool,
             output_state: OutputState::new(&globals, &qh),
             viewporter,
             fractional_manager,

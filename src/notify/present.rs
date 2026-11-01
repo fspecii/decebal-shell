@@ -12,7 +12,8 @@
 //!   [`MAX_CALLBACKS`] callbacks are ever outstanding;
 //! * when every buffer is busy the next attempt is scheduled ([`BUSY_RETRY`], then [`BUSY_BACKOFF`]) instead of spinning;
 //! * a single buffer, one surface and the whole daemon have byte budgets; an allocation past one is refused (and
-//!   reported by the caller), never silently grown.
+//!   reported by the caller), never silently grown. The budgets count [`alloc_bytes`]: the shm memory each buffer's
+//!   own exact-size pool occupies (page granularity), not just the pixels, so they bound the actual allocation.
 
 use std::time::{Duration, Instant};
 
@@ -27,12 +28,29 @@ pub const BUSY_RETRY: Duration = Duration::from_millis(16);
 /// Busy for longer than [`BUSY_BACKOFF_AFTER`]: look this rarely.
 pub const BUSY_BACKOFF: Duration = Duration::from_millis(250);
 pub const BUSY_BACKOFF_AFTER: Duration = Duration::from_secs(1);
-/// Largest single buffer (a 4096 x 1024 card at 4 bytes a pixel).
+/// Largest single buffer (a 4096 x 1024 card at 4 bytes a pixel), as [`alloc_bytes`].
 pub const MAX_BUFFER_BYTES: usize = 16 << 20;
-/// All buffers of one surface.
+/// All buffers of one surface, as [`alloc_bytes`].
 pub const MAX_SURFACE_BYTES: usize = 32 << 20;
-/// All buffers of the daemon, including those of destroyed surfaces the compositor still holds.
+/// All buffers of the daemon, including those of destroyed surfaces the compositor still holds, as [`alloc_bytes`].
 pub const MAX_TOTAL_BYTES: usize = 96 << 20;
+/// Granularity the shm file behind a pool is backed at. 4 KiB is the smallest page size Linux runs with; a kernel
+/// with bigger pages backs a little more than [`alloc_bytes`] says (at most one page per buffer).
+pub const PAGE_BYTES: usize = 4096;
+/// The slot allocator of the pool library hands out 64-byte aligned slots.
+const SLOT_ALIGN: usize = 64;
+
+/// Length of the shm pool created for one buffer of `size` device pixels (4 bytes a pixel): exactly the slot the
+/// library carves for it, so the pool never has to grow and has no free space left over.
+pub fn pool_len(size: (u32, u32)) -> usize {
+    (size.0 as usize * size.1 as usize * 4).max(1).div_ceil(SLOT_ALIGN) * SLOT_ALIGN
+}
+
+/// Shm memory one buffer of `size` occupies: its own pool, rounded up to [`PAGE_BYTES`]. This, not the pixel count,
+/// is what the byte budgets count.
+pub fn alloc_bytes(size: (u32, u32)) -> usize {
+    pool_len(size).div_ceil(PAGE_BYTES) * PAGE_BYTES
+}
 
 /// Whether the compositor has let go of a buffer (it may be drawn into and attached again, or destroyed).
 pub trait Releasable {
@@ -47,8 +65,14 @@ pub struct Entry<B> {
 }
 
 impl<B> Entry<B> {
+    /// The pixels of the buffer.
     pub fn bytes(&self) -> usize {
         self.size.0 as usize * self.size.1 as usize * 4
+    }
+
+    /// The shm memory the buffer's pool occupies (see [`alloc_bytes`]).
+    pub fn alloc_bytes(&self) -> usize {
+        alloc_bytes(self.size)
     }
 }
 
@@ -90,12 +114,27 @@ impl<B: Releasable> BufferSet<B> {
         self.entries.is_empty()
     }
 
+    /// Pixel bytes of the buffers held.
     pub fn bytes(&self) -> usize {
         self.entries.iter().map(Entry::bytes).sum()
     }
 
+    /// Shm memory of the buffers held; what the budgets count.
+    pub fn alloc_bytes(&self) -> usize {
+        self.entries.iter().map(Entry::alloc_bytes).sum()
+    }
+
     pub fn get(&self, i: usize) -> &B {
         &self.entries[i].buf
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &B> {
+        self.entries.iter().map(|e| &e.buf)
+    }
+
+    /// Mutable access, to draw into a released buffer.
+    pub fn get_mut(&mut self, i: usize) -> &mut B {
+        &mut self.entries[i].buf
     }
 
     pub fn insert(&mut self, buf: B, size: (u32, u32)) -> usize {
@@ -121,9 +160,9 @@ impl<B: Releasable> BufferSet<B> {
         std::mem::take(&mut self.entries)
     }
 
-    /// Chooses where a frame of `size` goes. `budget_left` is what the daemon's byte budget still allows.
+    /// Chooses where a frame of `size` goes. `budget_left` is what the daemon's byte budget ([`alloc_bytes`]) still allows.
     pub fn pick(&mut self, size: (u32, u32), budget_left: usize) -> Pick {
-        let bytes = size.0 as usize * size.1 as usize * 4;
+        let bytes = alloc_bytes(size);
         if bytes > MAX_BUFFER_BYTES {
             return Pick::Refused(Refusal::Oversize);
         }
@@ -134,7 +173,7 @@ impl<B: Releasable> BufferSet<B> {
         if self.entries.len() >= MAX_BUFFERS {
             return Pick::Busy;
         }
-        if self.bytes() + bytes > MAX_SURFACE_BYTES || bytes > budget_left {
+        if self.alloc_bytes() + bytes > MAX_SURFACE_BYTES || bytes > budget_left {
             return Pick::Refused(Refusal::Budget);
         }
         Pick::New
@@ -582,6 +621,7 @@ mod tests {
             assert!(p.buffers.len() <= MAX_BUFFERS, "round {round}: {} buffers", p.buffers.len());
             assert!(p.pacer.outstanding() <= MAX_CALLBACKS);
             assert!(p.buffers.bytes() <= MAX_SURFACE_BYTES);
+            assert!(p.buffers.alloc_bytes() <= MAX_SURFACE_BYTES, "round {round}: {} shm bytes", p.buffers.alloc_bytes());
         }
         assert!(p.stats.max_buffers <= MAX_BUFFERS);
         assert!(p.stats.max_callbacks <= MAX_CALLBACKS);
@@ -686,5 +726,81 @@ mod tests {
         assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER), None);
         pacer.busy(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1));
         assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1)), Some(BUSY_RETRY));
+    }
+
+    #[test]
+    fn a_buffers_pool_is_exactly_its_aligned_slot_and_the_budget_counts_its_pages() {
+        // the pool is the slot the library would carve (64-byte aligned), never smaller than the pixels
+        assert_eq!(pool_len((1, 1)), 64);
+        assert_eq!(pool_len((344, 100)), 344 * 100 * 4);
+        assert_eq!(pool_len((15, 1)), 64);
+        assert_eq!(pool_len((17, 1)), 128);
+        for size in [(1, 1), (7, 3), (344, 80), (517, 121), (4096, 1024)] {
+            let (len, alloc) = (pool_len(size), alloc_bytes(size));
+            assert!(len >= size.0 as usize * size.1 as usize * 4 && len % 64 == 0 && len - size.0 as usize * size.1 as usize * 4 < 64);
+            assert!(alloc >= len && alloc % PAGE_BYTES == 0 && alloc - len < PAGE_BYTES);
+        }
+        assert_eq!(alloc_bytes((1, 1)), PAGE_BYTES, "a tiny catcher still occupies a page");
+        assert_eq!(alloc_bytes((4096, 1024)), MAX_BUFFER_BYTES, "the largest card is exactly the buffer bound");
+        assert_eq!(alloc_bytes((344, 100)), 344 * 100 * 4 + (PAGE_BYTES - 344 * 100 * 4 % PAGE_BYTES) % PAGE_BYTES);
+    }
+
+    #[test]
+    fn the_byte_budgets_are_checked_against_page_rounded_pools() {
+        let mut set: BufferSet<Fake> = BufferSet::default();
+        // 1x1 is 4 pixel bytes but one page of shm
+        assert_eq!(set.pick((1, 1), PAGE_BYTES - 1), Pick::Refused(Refusal::Budget));
+        assert_eq!(set.pick((1, 1), PAGE_BYTES), Pick::New);
+        // a buffer whose pixels are under the bound but whose page-rounded pool is over it is refused
+        let just_over = (4096, 1024 + 1);
+        assert_eq!(set.pick(just_over, MAX_TOTAL_BYTES), Pick::Refused(Refusal::Oversize));
+        // a surface of small buffers is bounded by their pages, not their pixels
+        let tiny = (1, 1);
+        for _ in 0..MAX_BUFFERS {
+            set.insert(Fake(Rc::new(Cell::new(false))), tiny);
+        }
+        assert_eq!((set.bytes(), set.alloc_bytes()), (12, 3 * PAGE_BYTES));
+    }
+
+    #[test]
+    fn fragmentation_cannot_grow_allocation_because_every_buffer_owns_its_exact_pool() {
+        // Churn card sizes while the compositor releases buffers in an arbitrary order and track the sum of pools the
+        // way the host does: live plus retired. A shared pool could double past this; per-buffer pools cannot.
+        let mut live: BufferSet<Fake> = BufferSet::default();
+        let mut graveyard: Vec<Entry<Fake>> = Vec::new();
+        let mut flags: Vec<Rc<Cell<bool>>> = Vec::new();
+        let mut seed = 0x9e37_79b9u32;
+        let mut rand = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed
+        };
+        let mut peak = 0;
+        for round in 0..2000u32 {
+            let size = (200 + rand() % 900, 40 + rand() % 400);
+            let retired: usize = graveyard.iter().map(Entry::alloc_bytes).sum();
+            match live.pick(size, MAX_TOTAL_BYTES.saturating_sub(retired)) {
+                Pick::New => {
+                    let flag = Rc::new(Cell::new(false));
+                    live.insert(Fake(flag.clone()), size);
+                    flags.push(flag);
+                }
+                Pick::Reuse(i) => live.get(i).0.set(false),
+                Pick::Busy | Pick::Refused(_) => {}
+            }
+            if round % 97 == 0 {
+                graveyard.extend(live.take_all());
+            }
+            graveyard.retain(|e| !e.buf.released());
+            if let Some(f) = flags.get((rand() as usize) % flags.len().max(1)) {
+                f.set(true);
+            }
+            let total = live.alloc_bytes() + graveyard.iter().map(Entry::alloc_bytes).sum::<usize>();
+            peak = peak.max(total);
+            assert!(total <= MAX_TOTAL_BYTES, "round {round}: {total} shm bytes");
+            assert!(live.alloc_bytes() <= MAX_SURFACE_BYTES);
+        }
+        assert!(peak > 0);
     }
 }

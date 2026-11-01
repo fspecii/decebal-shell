@@ -34,7 +34,7 @@ wait_for, requests, socket_owned, rescue_tagged, FORCED = POPUP.wait_for, POPUP.
 
 ALL_PHASES = ["contract", "bus", "queue", "actions", "history", "persistence", "dnd", "themes", "scales", "burst", "churn", "pinned"]
 MAX_BUFFERS, MAX_CALLBACKS = 3, 2  # notify::present limits
-POOL_IDLE_BYTES = 1 << 20
+POOL_IDLE_BYTES = 0  # every buffer owns its pool, so nothing is left once the buffers are gone
 NAMESPACE = "decebal-notifications"
 CATCHER_NAMESPACE = "decebal-notifications-outside"
 LAYER_TOP, LAYER_OVERLAY = 2, 3
@@ -298,10 +298,13 @@ def check_presentation_bounds(trace, present, failures, label):
         if totals["max_buffers"] > limits["buffers"] or totals["max_callbacks"] > limits["callbacks"]:
             failures.append(f"{label}: the daemon reports {totals['max_buffers']} buffers / {totals['max_callbacks']} callbacks, past its own limits")
         for s in present["surfaces"]:
-            if s["buffers"] > limits["buffers"] or s["bytes"] > limits["surface_bytes"]:
-                failures.append(f"{label}: surface {s['id']} holds {s['buffers']} buffers / {s['bytes']} bytes")
+            if s["buffers"] > limits["buffers"] or s.get("alloc_bytes", s["bytes"]) > limits["surface_bytes"]:
+                failures.append(f"{label}: surface {s['id']} holds {s['buffers']} buffers / {s.get('alloc_bytes', s['bytes'])} shm bytes")
         if present["total_bytes"] > limits["total_bytes"]:
             failures.append(f"{label}: {present['total_bytes']} shm bytes in use, past the {limits['total_bytes']} budget")
+        # every buffer owns an exact-size pool: the pool lengths the library reports must stay within the modelled bytes
+        if present.get("pool_bytes", 0) > present["total_bytes"]:
+            failures.append(f"{label}: pools total {present['pool_bytes']} bytes, past the {present['total_bytes']} the budget counted")
     return {"buffer_peaks": buffers, "callback_peaks": callbacks, "buffers_created": created, "callbacks_requested": requested}
 
 
@@ -814,7 +817,7 @@ def phase_churn(rig):
     for i in ids:
         rig.call("CloseNotification", "u", i)
     idle = rig.settle(lambda: (lambda p: p if p and not p["surfaces"] and p["graveyard"] == 0 and p["pool_bytes"] <= POOL_IDLE_BYTES else None)(rig.present()),
-                      "no surfaces, no held buffers and a small pool after the churn", 10)
+                      "no surfaces, no held buffers and no shm pools after the churn", 10)
     rig.evidence["churn_idle"] = idle
     growth = rig.rss_kb() - rss_before
     rig.check(growth < 16 * 1024, f"churn: resident memory grew {growth} kB across the churn")

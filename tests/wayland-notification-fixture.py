@@ -134,8 +134,9 @@ def callbacks(spec):
 PRESENT = {
     "totals": {"max_buffers": 3, "max_callbacks": 2},
     "limits": {"buffers": 3, "callbacks": 2, "surface_bytes": 33554432, "total_bytes": 100663296},
-    "total_bytes": 200000,
-    "surfaces": [{"id": 1, "buffers": 3, "bytes": 200000}],
+    "total_bytes": 204800,
+    "pool_bytes": 200000,
+    "surfaces": [{"id": 1, "buffers": 3, "bytes": 200000, "alloc_bytes": 204800}],
 }
 
 
@@ -171,6 +172,14 @@ class PresentationBounds(unittest.TestCase):
         bad = dict(PRESENT, totals={"max_buffers": 4, "max_callbacks": 2}, total_bytes=10**9)
         FIXTURE.check_presentation_bounds("", bad, failures, "t")
         self.assertTrue(any("past its own limits" in f for f in failures) and any("budget" in f for f in failures), failures)
+        failures = []
+        pools = dict(PRESENT, pool_bytes=PRESENT["total_bytes"] + 1)
+        FIXTURE.check_presentation_bounds("", pools, failures, "t")
+        self.assertTrue(any("pools total" in f for f in failures), failures)
+        failures = []
+        big = dict(PRESENT, surfaces=[{"id": 1, "buffers": 3, "bytes": 200000, "alloc_bytes": 33554433}])
+        FIXTURE.check_presentation_bounds("", big, failures, "t")
+        self.assertTrue(any("shm bytes" in f for f in failures), failures)
 
 
 class Signals(unittest.TestCase):
