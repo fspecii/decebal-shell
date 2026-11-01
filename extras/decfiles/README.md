@@ -750,3 +750,15 @@ with identical before/after source fingerprints and no resource interruption.
 Evidence: `/var/tmp/decebal-files-open-source-gate4/result.json`.
 This includes type-checking the new regression tests; it does not mean they
 have executed, nor does it replace native GTK input/race acceptance.
+
+Focused execution update: all 9 original classification/Tracker tests passed
+from byte-preserved source sections extracted at `c868367`, using cached GIO,
+GLib and serde_json with private HOME/XDG, dead buses and no display. This
+includes real GIO filename guesses for EXE/DLL/Perl/Ruby/Python, cancellation
+stages, stale requests, exact path bytes and overlapping dispatched requests.
+Evidence: `/var/tmp/decebal-files-opening-state-tests/result.json`,
+`extraction.json` and `tests.log`. Source fingerprints remained unchanged.
+The full standalone-module attempt is retained as a failed harness run:
+its cached GIO artifact lacks the async lookup feature. Async probe/launch,
+GTK chooser, held-key and view-rebuild behavior are excluded from the focused
+execution and still require the full feature-correct Cargo/native gates.
