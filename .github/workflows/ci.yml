@@ -22,6 +22,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libpam0g-dev pkg-config fontconfig fonts-inter fonts-dejavu-core fonts-noto-cjk python3 util-linux dbus
       - name: Developer workload guard regressions
         run: python3 tests/desktop-job.py
+      - name: Artifact byte receipt regressions
+        run: python3 tests/artifact-snapshot.py
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

@@ -143,3 +143,24 @@ Direct Cargo target isolation does not inspect Cargo launched inside a shell or 
 Such controllers must use a checkout-owned target themselves and record positive test counts/names;
 a successful exit with zero matching tests is not regression evidence. Never seed a target with
 another checkout's root-crate fingerprints or incremental state.
+
+
+## Explicit artifact byte receipts
+
+`artifact_snapshot.py` records SHA256 and size for caller-selected relative paths,
+then verifies those same bytes before/after a gate. Use immutable copied artifacts,
+not the live installed directory. It never builds, installs, signals a process or
+infers which source revision produced a binary. A matching receipt is **not** a
+signature or source-build attestation; keep the producing job/revision separately.
+
+```sh
+python3 tools/dev/desktop_job.py -- python3 tools/dev/artifact_snapshot.py snapshot --root /var/tmp/my-artifacts --output /var/tmp/my-receipt.json bin/decnotify bin/decthemectl
+python3 tools/dev/desktop_job.py -- python3 tools/dev/artifact_snapshot.py verify --root /var/tmp/my-artifacts --manifest /var/tmp/my-receipt.json
+```
+
+The receipt must be new and is written mode 0600. Artifact paths are normalized
+relative paths; symlink components, non-regular files, duplicates, more than 256
+entries, files over 1 GiB, and files replaced/changed while hashing are refused.
+Verification reads no file outside the explicit artifact root. Reads can still
+cost I/O, so large snapshots use the shared desktop runner. Tests are temporary
+file-only: `python3 tests/artifact-snapshot.py`.
