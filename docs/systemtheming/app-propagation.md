@@ -534,3 +534,10 @@ mode changes, explicit side preference, and matching/stale fallback records.
 The latest source passes rustfmt/whitespace checks only; compile, test execution
 and native GTK/gsettings dry-run evidence remain pending. Theme capture's old
 macos/classic structural token remains a separate follow-up.
+
+Compilation update: combined icon ownership and decoration-side candidate
+`0d68442` passed `cargo check --locked --offline -j1 --all-targets` with identical
+before/after source fingerprints and no resource interruption. Evidence:
+`/var/tmp/decebal-theme-consistency-source-check/result.json`. New regression
+tests are type-checked but have not yet executed; native toolkit acceptance
+remains pending.
