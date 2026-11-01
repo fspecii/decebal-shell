@@ -518,3 +518,19 @@ Regression tests cover theme following over a stale legacy override, custom
 choices surviving a theme switch, automatic selection, and legacy-only
 compatibility. The source is formatted; compilation and execution of these new
 tests are pending. No live configuration migration was performed.
+
+### Decoration-side repair (source candidate, 2026-11-02)
+
+Toolkit button placement now reads the selected mode's decoration style from
+the same generated native catalogue used for rdwm geometry. This replaces the
+macos/classic-only inference that put Adwaita, Deepin and openKylin controls on
+the wrong side. Explicit legacy side choices remain supported. A persisted
+proven fallback can supply its actual side only when theme and mode match;
+stale or unknown-proof records are ignored. This does not add new decoration
+styles or claim that GTK can reproduce rdwm's exact button artwork.
+
+Added regressions iterate every native catalogue style in both modes and check
+mode changes, explicit side preference, and matching/stale fallback records.
+The latest source passes rustfmt/whitespace checks only; compile, test execution
+and native GTK/gsettings dry-run evidence remain pending. Theme capture's old
+macos/classic structural token remains a separate follow-up.

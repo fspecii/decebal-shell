@@ -741,7 +741,22 @@ pub fn current_palette(src: &Source) -> Result<(Palette, Selection), String> {
     let (t, problem) = src.build(&sel, system_dark());
     match problem {
         Some(p) => Err(p),
-        None => Ok((Palette::from_theme(&t), sel)),
+        None => {
+            let mut palette = Palette::from_theme(&t);
+            recorded_button_side(&mut palette, &crate::settings::io::json_load(&src.shell_json), &t.id, t.dark);
+            Ok((palette, sel))
+        }
+    }
+}
+
+/// A proven fallback belongs only to its recorded theme and mode; stale records cannot move app buttons.
+fn recorded_button_side(palette: &mut Palette, doc: &Value, theme: &str, dark: bool) {
+    let record = &doc["decoration_compat"];
+    if record["theme"].as_str() != Some(theme) || record["mode"].as_str() != Some(if dark { "dark" } else { "light" }) || !matches!(record["proof"].as_str(), Some("running" | "offline")) {
+        return;
+    }
+    if let Some(right) = record["applied"].as_str().and_then(crate::settings::decorations::buttons_right) {
+        palette.classic_buttons = right;
     }
 }
 
@@ -1356,6 +1371,23 @@ pub mod testutil {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn toolkit_buttons_follow_only_the_matching_proven_fallback() {
+        let mut p = palette(false);
+        p.classic_buttons = true;
+        let mut record = serde_json::json!({"decoration_compat":{"theme":"deepin","mode":"light","proof":"running","applied":"macos"}});
+        super::recorded_button_side(&mut p, &record, "deepin", false);
+        assert!(!p.classic_buttons);
+        p.classic_buttons = true;
+        super::recorded_button_side(&mut p, &record, "other", false);
+        assert!(p.classic_buttons);
+        super::recorded_button_side(&mut p, &record, "deepin", true);
+        assert!(p.classic_buttons);
+        record["decoration_compat"]["proof"] = serde_json::json!("unknown");
+        super::recorded_button_side(&mut p, &record, "deepin", false);
+        assert!(p.classic_buttons);
+    }
+
     #[test]
     fn policy_owned_icons_reach_apps_including_an_explicit_automatic_choice() {
         let dir = super::testutil::tmp("icon-slot-authority");
