@@ -88,6 +88,7 @@ impl Ui {
         if index == active {
             self.switch_tab(if index + 1 < count { index + 1 } else { index - 1 });
         }
+        self.cancel_open("The tab collection changed; the pending open was cancelled.");
         self.tabs.borrow_mut().remove(index);
         if index < self.active_tab.get() {
             self.active_tab.set(self.active_tab.get() - 1);
@@ -97,6 +98,7 @@ impl Ui {
 
     /// Move the live model into the active tab's slot.
     fn park_active(&self) {
+        self.cancel_open("Switching tabs cancelled the pending open request.");
         let model = std::mem::take(&mut *self.model.borrow_mut());
         let mut tabs = self.tabs.borrow_mut();
         let slot = &mut tabs[self.active_tab.get()];

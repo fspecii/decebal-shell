@@ -27,7 +27,12 @@ def settle(previous,status,seconds=15):
 def wait_records(count):
     s.wait(lambda:len(reg.records())>=count,f'expected {count} opener records, have {len(reg.records())}')
 def only_new(count,opener,path):
-    wait_records(count);records=reg.records();assert len(records)==count,records
+    wait_records(count)
+    deadline=time.monotonic()+.5
+    while time.monotonic()<deadline:
+        assert len(reg.records())==count,reg.records()
+        time.sleep(.02)
+    records=reg.records();assert len(records)==count,records
     assert records[-1]['opener']==opener,records[-1];assert reg.argv(records[-1])==[os.fsencode(path)],(reg.argv(records[-1]),path)
 def pwned():
     return [p for base in (Path.cwd(),s.root,s.home,s.home/'Documents',s.home/'Documents'/'args') for p in base.glob('pwned-*')]
@@ -41,9 +46,9 @@ try:
     raw_row=os.fsencode(args).decode('utf8','replace')+'/raw-�-�.dfopen'
     target,other=chooser/'target.dfopen',chooser/'other.dfopen';touch(target);touch(other)
     fails,nohandler=errors/'fails.dffail',errors/'nohandler.dfnone';touch(fails);touch(nohandler)
-    marker=s.root/'EXECUTED';tool=execs/'tool.dfopen';touch(tool,('#!/bin/sh\ntouch %s\n'%marker).encode(),0o755)
+    marker=s.root/'EXECUTED';tool=execs/'tool.sh';touch(tool,('#!/bin/sh\ntouch %s\n'%marker).encode(),0o755)
     launcher=execs/'launcher.desktop';touch(launcher,('[Desktop Entry]\nType=Application\nName=Run\nExec=touch %s-desktop\n'%marker).encode(),0o644)
-    link=execs/'link-to-tool.dfopen';link.symlink_to(tool)
+    link=execs/'link-to-tool.sh';link.symlink_to(tool)
     tool_stat=(tool.stat().st_mode,tool.read_bytes())
     s.launch(folder=docs)
 
@@ -109,6 +114,10 @@ try:
     before=requests();s.key('ctrl+o');settle(before,'launched');only_new(6,'A',spaced);assert s.state()['search'].get('active'),'explicit Open must stay in search'
     s.key('Return');s.wait(lambda:not s.state()['search'].get('active') and s.op().get('selected')==str(spaced),'Enter on a search result must reveal it')
     assert len(reg.records())==6;s.cases.append('search: Enter reveals and selects, explicit Open (Ctrl+O) opens the selected result')
+    # Execute bits reported by data mounts do not turn an ordinary document into a program.
+    os.chmod(spaced,0o755);s.address(args);select(spaced);before=requests();s.key('Return')
+    settle(before,'launched');only_new(7,'A',spaced)
+    s.cases.append('ordinary document with mount-style execute bits opens in its registered viewer')
     s.finish({'features':[],'scope':'Private X11 actual GTK controls and a private MIME registry; fake registered opener only; no default-handler change, Wayland or Orca acceptance'})
 finally:
     s.close()

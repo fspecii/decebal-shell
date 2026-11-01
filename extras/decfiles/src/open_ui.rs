@@ -15,7 +15,11 @@ use decfiles::{
 };
 use gio::prelude::*;
 use gtk::prelude::*;
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    path::Path,
+    rc::Rc,
+};
 
 /// Row context menu: (position in the view's model, cell widget, x, y) of a secondary click.
 pub type RowMenu = Rc<dyn Fn(u32, &gtk::Widget, f64, f64)>;
@@ -29,6 +33,7 @@ pub struct Controls {
     open_with_action: gio::SimpleAction,
     pub(crate) tracker: RefCell<Tracker>,
     menu: RefCell<Option<gtk::PopoverMenu>>,
+    chooser: RefCell<Option<(u64, gtk::Dialog)>>,
     /// The selected search result (taken from the result store), used only by explicit Open.
     pub(crate) search_selected: RefCell<Option<Entry>>,
 }
@@ -48,6 +53,7 @@ impl Controls {
             open_with_action: gio::SimpleAction::new("open-with", None),
             tracker: RefCell::new(Tracker::default()),
             menu: RefCell::new(None),
+            chooser: RefCell::new(None),
             search_selected: RefCell::new(None),
         }
     }
@@ -140,17 +146,22 @@ impl Ui {
 
     /// Drop the current request; its pending GIO operations are cancelled.
     pub fn cancel_open(&self, message: &str) {
+        let chooser = self.opener.tracker.borrow().pending().filter(|pending| pending.stage == Stage::Choosing).map(|pending| pending.id);
         let token = self.opener.tracker.borrow_mut().cancel(message);
         if let Some(token) = token {
             token.cancel();
+            if let Some(id) = chooser {
+                self.close_open_chooser(id);
+                self.status.set_text("Open With was superseded; nothing was opened.");
+            }
         }
     }
 
     /// A selection other than the exact target supersedes the request.
     pub fn open_selection_changed(&self, selected: Option<&Path>) {
-        let token = self.opener.tracker.borrow_mut().cancel_unless_target(selected, "The selection changed, so nothing was opened.");
-        if let Some(token) = token {
-            token.cancel();
+        let changed = self.opener.tracker.borrow().pending().is_some_and(|pending| Some(pending.path.as_path()) != selected);
+        if changed {
+            self.cancel_open("The selection changed, so nothing was opened.");
         }
     }
 
@@ -201,6 +212,10 @@ impl Ui {
         // The launch target is always the validated selection, never whatever a view shows.
         if self.open_target().is_none_or(|target| target.path != entry.path) {
             self.status.set_text("Select the file first.");
+            return;
+        }
+        if self.opener.tracker.borrow().pending().is_some_and(|pending| pending.stage == Stage::Launching && pending.path == entry.path) {
+            self.status.set_text("This file is already being opened.");
             return;
         }
         let scope = self.open_scope();
@@ -298,7 +313,7 @@ impl Ui {
     }
 
     fn open_default(self: &Rc<Self>, pending: &opening::Pending, content_type: String) {
-        self.opener.tracker.borrow_mut().advance(pending.id, Stage::Launching);
+        self.opener.tracker.borrow_mut().advance(pending.id, Stage::Resolving);
         let (weak, id, lookup) = (Rc::downgrade(self), pending.id, content_type.clone());
         opening::default_app(&content_type, &pending.cancel, move |result| {
             if let Some(ui) = weak.upgrade() {
@@ -313,7 +328,7 @@ impl Ui {
         };
         match result {
             Ok(app) => self.launch_app(pending, app),
-            Err(error) if error.matches(gio::IOErrorEnum::Cancelled) => {}
+            Err(error) if error.matches(gio::IOErrorEnum::Cancelled) => self.open_end(id, "cancelled", "Application lookup was cancelled; nothing was opened.".into()),
             Err(error) => {
                 let kind = if content_type.is_empty() { "this type of".to_string() } else { gio::content_type_get_description(content_type).to_string() };
                 self.open_failed(
@@ -340,7 +355,7 @@ impl Ui {
             };
             match result {
                 Ok(()) => ui.open_end(id, "launched", format!("Opened “{name}” with {app_name}.")),
-                Err(error) if error.matches(gio::IOErrorEnum::Cancelled) => {}
+                Err(error) if error.matches(gio::IOErrorEnum::Cancelled) => ui.open_end(id, "unknown", "The application launch was interrupted; it may already have started.".into()),
                 Err(error) => ui.open_failed(id, format!("Could not open “{name}” with {app_name}: {}", error.message())),
             }
         });
@@ -376,8 +391,13 @@ impl Ui {
         accept.set_sensitive(chooser.app_info().is_some());
         let enable = accept.clone();
         chooser.connect_application_selected(move |_, _| enable.set_sensitive(true));
-        let activated = dialog.clone();
-        chooser.connect_application_activated(move |_, _| activated.response(gtk::ResponseType::Accept));
+        let activated = dialog.downgrade();
+        chooser.connect_application_activated(move |_, _| {
+            if let Some(dialog) = activated.upgrade() {
+                dialog.response(gtk::ResponseType::Accept);
+            }
+        });
+        self.opener.chooser.replace(Some((pending.id, dialog.clone())));
         self.ops.dialog.replace(Some(dialog.clone()));
         self.update_operation_controls();
         self.dump();
@@ -388,15 +408,42 @@ impl Ui {
                 dialog.destroy();
                 return;
             };
-            ui.ops.dialog.borrow_mut().take();
-            dialog.destroy();
+            if !ui.opener.chooser.borrow().as_ref().is_some_and(|(owner, owned)| *owner == id && owned == dialog) {
+                return; // Programmatic cancellation already disposed this dialog.
+            }
+            if response == gtk::ResponseType::Accept && app.is_none() {
+                ui.status.set_text("Select an application before opening this file.");
+                return;
+            }
+            ui.close_open_chooser(id);
             ui.chosen(id, app);
         });
         dialog.present();
     }
 
+    fn close_open_chooser(&self, id: u64) {
+        let owned = {
+            let mut slot = self.opener.chooser.borrow_mut();
+            if slot.as_ref().is_some_and(|(owner, _)| *owner == id) {
+                slot.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, dialog)) = owned {
+            {
+                let mut slot = self.ops.dialog.borrow_mut();
+                if slot.as_ref() == Some(&dialog) {
+                    slot.take();
+                }
+            }
+            dialog.destroy();
+        }
+    }
+
     fn chosen(self: &Rc<Self>, id: u64, app: Option<gio::AppInfo>) {
         let Some(pending) = self.opener.tracker.borrow().current(id).cloned() else {
+            self.status.set_text("Open With was superseded; nothing was opened.");
             return;
         };
         match app {
@@ -413,6 +460,9 @@ impl Ui {
             let Some(ui) = weak.upgrade().filter(|ui| ui.render_generation.get() == generation) else {
                 return;
             };
+            if position == gtk::INVALID_LIST_POSITION {
+                return;
+            }
             let selection = slot.borrow().clone();
             if let Some(selection) = selection {
                 if selection.selected() != position {
@@ -426,9 +476,24 @@ impl Ui {
     /// Menu / Shift+F10 on a file view opens the same menu for the current selection.
     pub fn attach_open_keys(self: &Rc<Self>, view: &impl IsA<gtk::Widget>, generation: u64) {
         let keys = gtk::EventControllerKey::new();
+        keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let enter_down = Rc::new(Cell::new(false));
+        let pressed = enter_down.clone();
+        keys.connect_key_released(move |_, key, _, _| {
+            if matches!(key, gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter) {
+                enter_down.set(false);
+            }
+        });
+        let focus = gtk::EventControllerFocus::new();
+        let reset = pressed.clone();
+        focus.connect_leave(move |_| reset.set(false));
+        view.add_controller(focus);
         let anchor = AsRef::<gtk::Widget>::as_ref(view).downgrade();
         let weak = Rc::downgrade(self);
         keys.connect_key_pressed(move |_, key, _, modifiers| {
+            if matches!(key, gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter) && pressed.replace(true) {
+                return glib::Propagation::Stop;
+            }
             let menu = key == gtk::gdk::Key::Menu || (key == gtk::gdk::Key::F10 && modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK));
             let ui = weak.upgrade().filter(|ui| menu && ui.render_generation.get() == generation);
             match (ui, anchor.upgrade()) {

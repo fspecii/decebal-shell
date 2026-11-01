@@ -59,15 +59,39 @@ impl Refusal {
     }
 }
 
-const PROGRAM_TYPES: &[&str] = &["application/x-executable", "application/x-pie-executable", "application/x-sharedlib", "application/vnd.appimage"];
+const PROGRAM_TYPES: &[&str] = &[
+    "application/x-executable",
+    "application/x-pie-executable",
+    "application/x-sharedlib",
+    "application/vnd.appimage",
+    "application/x-ms-dos-executable",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-msdos-program",
+    "application/x-java-archive",
+    "application/java-archive",
+    "application/x-iso9660-appimage",
+];
+const SCRIPT_TYPES: &[&str] = &[
+    "text/x-shellscript",
+    "application/x-shellscript",
+    "text/x-python",
+    "application/x-python-code",
+    "text/x-perl",
+    "text/x-ruby",
+    "text/javascript",
+    "application/javascript",
+    "application/x-php",
+    "text/x-php",
+];
 
 pub fn is_desktop_entry(path: &Path, content_type: &str) -> bool {
     content_type == "application/x-desktop" || path.file_name().is_some_and(|name| name.as_bytes().to_ascii_lowercase().ends_with(b".desktop"))
 }
 
-/// Any execute bit (of the symlink target), or a program content type.
+/// Program content, or an executable script. Mounts may report execute bits on
+/// ordinary data files, so permission bits alone must not block their viewers.
 pub fn is_executable(probe: &Probe) -> bool {
-    probe.mode & 0o111 != 0 || PROGRAM_TYPES.contains(&probe.content_type.as_str())
+    PROGRAM_TYPES.contains(&probe.content_type.as_str()) || (probe.mode & 0o111 != 0 && SCRIPT_TYPES.contains(&probe.content_type.as_str()))
 }
 
 /// Default activation never hands programs or launchers to anything. Open With is the user's
@@ -127,6 +151,7 @@ pub struct Scope {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     Probing,
+    Resolving,
     Choosing,
     Launching,
 }
@@ -200,8 +225,19 @@ impl Tracker {
         true
     }
 
-    /// Drop the current request (if any); the caller must cancel the returned token.
+    /// Cancel only before dispatch. An already dispatched launch keeps its token and callback.
+    /// A newer request may replace its UI record, but cannot recall the application.
     pub fn cancel(&mut self, message: &str) -> Option<gio::Cancellable> {
+        if let Some(pending) = self.pending.as_ref().filter(|pending| pending.stage == Stage::Launching) {
+            self.last = Some(Record {
+                id: pending.id,
+                path: pending.path.clone(),
+                purpose: pending.purpose,
+                status: "dispatched",
+                message: "The application is already being started. This action cannot recall that launch.".into(),
+            });
+            return None;
+        }
         let pending = self.pending.take()?;
         self.last = Some(Record { id: pending.id, path: pending.path, purpose: pending.purpose, status: "cancelled", message: message.into() });
         Some(pending.cancel)
@@ -276,6 +312,19 @@ mod tests {
     }
 
     #[test]
+    fn foreign_program_types_are_not_default_opened_but_mount_execute_bits_do_not_block_data() {
+        for content_type in PROGRAM_TYPES {
+            let program = probe_of(Kind::Regular, content_type, 0o100644);
+            assert_eq!(judge(Path::new("/base/program"), &program, Purpose::Default), Err(Refusal::Executable));
+            assert_eq!(judge(Path::new("/base/program"), &program, Purpose::Chooser), Ok(()));
+        }
+        for content_type in ["text/plain", "image/png", "application/pdf"] {
+            let data = probe_of(Kind::Regular, content_type, 0o100755);
+            assert_eq!(judge(Path::new("/mounted/data"), &data, Purpose::Default), Ok(()));
+        }
+    }
+
+    #[test]
     fn desktop_entry_names_are_matched_on_raw_bytes() {
         let raw = PathBuf::from(OsString::from_vec(b"/b/\xff.DESKTOP".to_vec()));
         assert!(is_desktop_entry(&raw, ""));
@@ -305,6 +354,44 @@ mod tests {
         assert!(tracker.pending().is_none());
         assert!(!tracker.finish(second.id, "launched", "twice".into()));
         assert_eq!(tracker.last().map(|record| record.message.as_str()), Some("done"));
+    }
+
+    #[test]
+    fn cancellation_is_truthful_before_and_after_dispatch() {
+        for stage in [Stage::Probing, Stage::Resolving, Stage::Choosing, Stage::Launching] {
+            for selection_change in [false, true] {
+                let mut tracker = Tracker::default();
+                let (pending, _) = tracker.begin("/base/a".into(), Purpose::Default, scope());
+                tracker.advance(pending.id, stage);
+                let token = if selection_change { tracker.cancel_unless_target(Some(Path::new("/base/b")), "Nothing was opened.") } else { tracker.cancel("Nothing was opened.") };
+                if stage == Stage::Launching {
+                    assert!(token.is_none());
+                    assert!(tracker.current(pending.id).is_some());
+                    assert!(!pending.cancel.is_cancelled());
+                    assert_eq!(tracker.last().unwrap().status, "dispatched");
+                    assert!(!tracker.last().unwrap().message.contains("Nothing was opened"));
+                    assert!(tracker.finish(pending.id, "launched", "Known launch success".into()));
+                    assert_eq!(tracker.last().unwrap().status, "launched");
+                } else {
+                    token.expect("pre-dispatch request must be cancelled").cancel();
+                    assert!(pending.cancel.is_cancelled());
+                    assert!(tracker.current(pending.id).is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn superseding_a_dispatched_request_does_not_cancel_its_application_or_replace_a_newer_result() {
+        let mut tracker = Tracker::default();
+        let (first, _) = tracker.begin("/base/a".into(), Purpose::Default, scope());
+        tracker.advance(first.id, Stage::Launching);
+        let (second, token) = tracker.begin("/base/b".into(), Purpose::Default, scope());
+        assert!(token.is_none());
+        assert!(!first.cancel.is_cancelled());
+        assert!(tracker.finish(second.id, "launched", "Opened B".into()));
+        assert!(!tracker.finish(first.id, "launched", "Opened A".into()));
+        assert_eq!(tracker.last().unwrap().message, "Opened B");
     }
 
     #[test]

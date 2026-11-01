@@ -2,11 +2,11 @@
 XDG_DATA_HOME / XDG_CONFIG_HOME (mkdtemp under /var/tmp, mode 0700): three fixture MIME types,
 two fake openers (A is the registered default, B is only associated), one opener whose program
 does not exist, and a type with no handler. Nothing here touches the live MIME database,
-mimeapps.list, default handlers or applications; the real system registry stays visible only
-read-only through the unchanged XDG_DATA_DIRS."""
+mimeapps.list, default handlers or applications; host application registries are hidden; only the system MIME type database is read-only."""
 from pathlib import Path
 import hashlib,json,os,subprocess,sys
 
+SYSTEM_MIME=Path('/usr/share/mime')
 MIME='application/x-decfiles-%s'
 XML='''<?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
@@ -20,6 +20,13 @@ class Registry:
         data,config=Path(s.env['XDG_DATA_HOME']),Path(s.env['XDG_CONFIG_HOME'])
         assert str(data).startswith('/var/tmp/') and str(config).startswith('/var/tmp/'),'registry must be private'
         self.data,self.config=data,config
+        # Preserve type definitions, but expose no host applications or defaults.
+        registry_data=s.root/'registry-data';registry_data.mkdir()
+        registry_config=s.root/'registry-config';registry_config.mkdir()
+        assert SYSTEM_MIME.is_dir(), 'a system shared-mime-info database is required'
+        (registry_data/'mime').symlink_to(SYSTEM_MIME,target_is_directory=True)
+        s.env['XDG_DATA_DIRS']=str(registry_data)
+        s.env['XDG_CONFIG_DIRS']=str(registry_config)
         self.log=s.root/'opener-log';self.log.mkdir()
         self.apps=data/'applications';self.apps.mkdir()
         packages=data/'mime'/'packages';packages.mkdir(parents=True)
@@ -32,7 +39,9 @@ class Registry:
         app('decfiles-fake-a.desktop','Decfiles Fake Opener A',recorder+' A %f','open')
         app('decfiles-fake-b.desktop','Decfiles Fake Opener B',recorder+' B %f','open')
         app('decfiles-fake-c.desktop','Decfiles Missing Opener C','/nonexistent-decfiles-opener %f','fail')
-        (config/'mimeapps.list').write_text(f'[Default Applications]\n{MIME%"open"}=decfiles-fake-a.desktop;\n{MIME%"fail"}=decfiles-fake-c.desktop;\n')
+        (config/'mimeapps.list').write_text(f'[Default Applications]\n{MIME%"open"}=decfiles-fake-a.desktop;\n{MIME%"fail"}=decfiles-fake-c.desktop;\n[Added Associations]\n{MIME%"open"}=decfiles-fake-a.desktop;decfiles-fake-b.desktop;\n')
+        probe=subprocess.run(['gio','mime',MIME%'none'],env=dict(s.env,LC_ALL='C'),capture_output=True,text=True,timeout=10,check=True)
+        assert 'No default applications for' in probe.stdout, f'isolated no-handler precondition failed: {probe.stdout}'
         self.baseline=self.snapshot()
 
     def snapshot(self):

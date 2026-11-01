@@ -250,8 +250,8 @@ impl Ui {
 
     /// Enter or double click on a row of the committed folder model. Folders navigate; a file
     /// is selected through the view's own selection and opened with its default application.
-    /// `single_click` is a lone pointer click in the columns list, which only selects.
-    fn activate(self: &Rc<Self>, selection: &gtk::SingleSelection, position: u32, index: usize, generation: u64, single_click: bool) {
+    /// Non-double pointer activations in columns only select; Enter opens normally.
+    fn activate(self: &Rc<Self>, selection: &gtk::SingleSelection, position: u32, index: usize, generation: u64, select_only: bool) {
         if self.render_generation.get() != generation {
             return;
         }
@@ -263,7 +263,7 @@ impl Ui {
             return;
         }
         let known = self.model.borrow().columns.get(index).is_some_and(|column| column.entries.iter().any(|candidate| candidate.path == entry.path));
-        if single_click || !known {
+        if select_only || !known {
             return;
         }
         if selection.selected() != position {
@@ -366,7 +366,7 @@ impl Ui {
                     let weak = Rc::downgrade(self);
                     list.connect_activate(move |_, position| {
                         if let Some(ui) = weak.upgrade() {
-                            ui.activate(&selected, position, index, generation, presses.replace(0) == 1);
+                            ui.activate(&selected, position, index, generation, matches!(presses.replace(0), 1 | 3..));
                         }
                     });
                     scroll.set_child(Some(&list));

@@ -33,7 +33,7 @@ try:
     s.cases.append('changing the selection supersedes a pending open; the late probe launches nothing')
     # The newer, explicit request for the now-selected file is the only one that launches.
     s.key('Return');s.wait(lambda:pending(second),'second request missing');s.wait(lambda:len(reg.records())==1,'second file did not open',DELAY_MS/1000+10)
-    assert reg.argv(reg.records()[0])==[os.fsencode(second)],reg.records();assert last()['status']=='launched'
+    assert reg.argv(reg.records()[0])==[os.fsencode(second)],reg.records();s.wait(lambda:last().get('status')=='launched','new request launch outcome was not published')
     s.cases.append('only the newest request for the exact selected file launches')
 
     # 2. The target is renamed on disk while the request is held: the monitor refresh clears the selection.
@@ -52,7 +52,8 @@ try:
     # 4. Closing cancels the pending request: normal exit, nothing launched afterwards.
     s.address(base);s.select_item(first);s.key('Return');s.wait(lambda:pending(first),'request before close missing')
     (s.out/'state-final.json').write_text(json.dumps(s.state(),indent=2)+'\n')
-    s.focus(s.window);s.key('ctrl+w');s.app.wait(timeout=5);assert s.app.returncode==0
+    before_close=time.monotonic();s.focus(s.window);s.key('ctrl+w');s.app.wait(timeout=5);assert s.app.returncode==0
+    assert time.monotonic()-before_close<DELAY_MS/1000,'close waited for the held pre-dispatch request'
     outlive_delay();assert len(reg.records())==1,reg.records()
     s.cases.append('closing during a pending open exits normally and launches nothing')
     reg.unchanged()

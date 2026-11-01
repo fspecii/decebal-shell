@@ -137,7 +137,7 @@ does not save preferences or read/write Decebal configuration.
 
 ## Opening files and Open With
 
-**Source-complete but not yet built, tested or run** (see the status at the end of this section).
+**Under review; the original draft passed a compile check, and behavioural repairs await validation** (see the status below).
 
 - Enter or double click on a **folder** navigates as before. On a **file** it opens that exact
   item with its registered default application. In the columns layout a lone single click
@@ -156,20 +156,20 @@ does not save preferences or read/write Decebal configuration.
 - Typed GIO only: `g_file_query_info_async` (type and mode), `g_app_info_get_default_for_type_async`
   and `g_app_info_launch_uris_async` with a `GdkAppLaunchContext`. The target is a `GFile` made from
   the exact Unix path; GIO substitutes its URI/path into the application's Exec line as one argument.
-  No shell string is built, file contents are never executed and permissions are never changed.
+  No shell string is built, the selected path is never executed directly, and permissions are never changed.
   Non-UTF8 names survive as percent-encoded bytes.
-- **Executables and launchers are never run.** Enter/double click/Open on a file with any execute
-  bit (also through a symlink), a program content type (ELF, PIE, shared object, AppImage) or a
-  `.desktop` file does not launch anything and explains why. Open With remains available there as
-  an explicit choice of a viewing application. Folders, devices, pipes and sockets are never
-  launched.
+- **Known programs and launchers require an explicit application choice.** Default Open refuses
+  native/Windows/Java/AppImage program types, executable scripts and `.desktop` files (also through
+  symlinks). Execute bits alone do not block ordinary documents on mounts that report them for
+  every file. Open With remains available as an explicit viewer choice. Devices, pipes and sockets
+  are never handed to applications; folders navigate instead.
 - Nothing blocks the UI thread in Files' own code: the probe, default lookup and launch are
   asynchronous and cancellable. (GTK's chooser widget itself populates its list synchronously.)
-- Each request has an id. A newer request, a changed selection, navigation, ending a search,
-  a dialog/operation/clipboard read starting, or closing makes it stale; the completion is
-  ignored and nothing launches. A completion also launches only if the folder, tab, search and
-  the *exact selected path* are still the ones the request started with and the item is still
-  listed. Cancelling cannot recall an application that has already started.
+- Each request has an id. Before dispatch, a newer request, changed selection, navigation,
+  tab/search change, operation/dialog/clipboard work or closing supersedes it. Its late completion
+  cannot launch anything. Folder, tab, search and exact selection are checked again at dispatch.
+  Afterwards cancellation cannot recall the application: its token remains intact, and a known
+  completion may update its record unless a newer request owns the UI.
 - Failures (missing file, no default application, program that cannot start) show in the error
   line and status; a refusal or cancel shows an explanation. None are silent.
 - **Search:** Enter/double click on a result still reveals it (folder opened, file selected).
@@ -182,7 +182,9 @@ does not save preferences or read/write Decebal configuration.
 - Evidence: the opt-in state snapshot gains an `open` object (pending/last request with exact
   path bytes, control enabled flags, selected search result).
 
-Status of this change: **no cargo build, Rust tests, clippy, native fixture or GIO launch was run.**
+Status: the original `8997acc` passed `cargo check --all-targets` with unchanged source.
+The review repairs below have not yet been compile-checked. Rust tests, Clippy and native
+acceptance remain pending; no GUI application or default-handler installation was performed.
 New Rust tests are in `src/opening.rs` (judge matrix, request identity and stale guards, exact path
 bytes, probe of files/folders/links/FIFO/missing/cancelled, an exact-argument launch test through a
 private `.desktop` recorder with spaced, metacharacter, newline and non-UTF8 names, and a missing
@@ -681,3 +683,39 @@ folders and resource benchmarks still need acceptance. There is no installer,
 - The pinned gtk-rs/GIO sources in the local Cargo registry were used to verify
   exact callback signatures. No external file-manager source or artwork was
   copied.
+
+### Opening review follow-up
+
+The original `8997acc` draft passed an isolated `cargo check --all-targets` gate
+with unchanged source. Subsequent corrections below require new acceptance:
+
+- Handler lookup now has a separate Resolving stage. Cancelling before dispatch
+  cancels the GIO operation; after dispatch, the launch token is left alone and
+  status says the application is already starting. A known late success is
+  recorded unless a newer request owns the UI; it never overwrites that request.
+- A superseded Open With chooser is destroyed and releases its own dialog slot.
+  Other operation dialogs are not closed. Accept without an application leaves
+  the chooser open and asks for a selection.
+- Pending opens are cancelled before tab parking/removal, avoiding index reuse.
+  A dispatched launch cannot be recalled. Repeated Enter is suppressed until
+  release/focus leave, triple-click selects instead of launching again, and
+  recycled list rows cannot change the target.
+- Default opening refuses the known native/Windows/Java/AppImage program MIME
+  types and executable scripts. Execute bits alone do not refuse normal data
+  on FAT/exFAT/NTFS-style mounts. Open With remains an explicit application
+  choice. Files never executes the selected path directly; the registered
+  application determines how it handles an ordinary document.
+
+The stage/selection cancellation matrix and foreign-program/mount-permission
+unit regressions are added but not yet run. The updated source is not native
+acceptance or a production/default-handler installation.
+
+Fixture isolation now hides host application/default registries through private
+`XDG_DATA_DIRS`/`XDG_CONFIG_DIRS`, while exposing only the system shared-MIME type
+database read-only. Both fake viewers have explicit associations, and a no-handler
+precondition runs before the native app. Three pure fixture-registry tests pass;
+they execute no MIME utility or application. Native duplicate-launch checks now
+observe a settling window and close timing is checked against the held probe.
+Dedicated native chooser-cancellation, tab-index-reuse, search-id and dispatched-
+launch race cases remain acceptance work; the source fixes and unit regressions
+do not substitute for those workflows.
