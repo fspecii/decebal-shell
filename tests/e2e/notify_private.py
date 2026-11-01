@@ -86,8 +86,16 @@ class SignalGuard:
     def __init__(self):
         self.depth = 0
         self.pending = None
+        self.received = None
+
+    def checkpoint(self):
+        # C extension callbacks (notably dbus-python) may catch signal-handler
+        # exceptions. Retain cancellation until normal Python control resumes.
+        if self.received and not self.depth:
+            raise Interrupted(self.received)
 
     def handler(self, signum, frame):
+        self.received = self.received or signum
         if self.depth:
             self.pending = self.pending or signum
             return
@@ -117,6 +125,7 @@ def run_main(main):
     GUARD.install()
     try:
         code = main()
+        GUARD.checkpoint()
     except Interrupted as stop:
         print(f'Interrupted by signal {stop.signum}; cleanup finished, private evidence retained', file=sys.stderr, flush=True)
         code = 128 + stop.signum
@@ -187,8 +196,10 @@ def wait(check, reason, seconds=10, catch=RETRYABLE, interval=.04):
     end = time.monotonic() + seconds
     last = None
     while time.monotonic() < end:
+        GUARD.checkpoint()
         try:
             result = check()
+            GUARD.checkpoint()
             if result:
                 return result
         except catch as error:
@@ -418,7 +429,7 @@ class Session:
                     stream.close()
             repair_permissions(self.root)
             self._write_evidence(error)
-            clean = error is None and not self.ledger.failures and not GUARD.pending
+            clean = error is None and not self.ledger.failures and not GUARD.received
             if clean and not self.keep:
                 try:
                     if self.root.is_symlink() or not self.root.name.startswith(self.prefix + '.'):
@@ -443,7 +454,7 @@ class Session:
                         shutil.copy2(path, self.evidence / path.name)
             outcome = {'display': self.display, 'binaries_sha256': self.hashes, 'children': self.ledger.summary(),
                        'forced': self.ledger.forced, 'cleanup_failures': self.ledger.failures,
-                       'interrupted_signal': (error.signum if isinstance(error, Interrupted) else GUARD.pending),
+                       'interrupted_signal': (error.signum if isinstance(error, Interrupted) else GUARD.received),
                        'error': type(error).__name__ if error is not None else None}
             (self.evidence / 'cleanup.json').write_text(json.dumps(outcome, indent=2) + '\n')
         except OSError as problem:
@@ -456,6 +467,7 @@ class Session:
         return stream
 
     def start(self, argv, label):
+        GUARD.checkpoint()
         return self.ledger.start(argv, label, env=self.env, stdout=self.open_log(label))
 
     def stop(self, child, grace=4.0):
@@ -503,6 +515,7 @@ class Session:
 
     def run(self, *args, timeout=10):
         """Run a helper tool to completion with the private environment. X tools first re-prove display ownership."""
+        GUARD.checkpoint()
         argv = [str(part) for part in args]
         if argv[0] in X_TOOLS:
             self.require_display()

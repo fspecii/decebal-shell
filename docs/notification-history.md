@@ -78,3 +78,16 @@ fresh evidence; a clean pass removes the tree. Prerequisites that are missing
 (tools, binaries, non-root uid for the permission-denied scenarios) exit 77 for
 history and fail for theme. Fixture unit checks (no processes started):
 `python3 tests/e2e/notify-private-test.py`.
+
+
+### X11 cancellation through D-Bus callbacks
+
+The owned fixture latches termination signals as well as raising them. The native
+X11 attempt at `/var/tmp/decebal-notify-x11-theme-qualified/` reached its repaint
+assertions, but was interrupted by the resource guard at 18.1% full I/O stalls;
+it is **not a passing gate**. Its D-Bus callback boundary swallowed a Python
+signal-handler exception. Checkpoints now rethrow that latched cancellation at
+normal Python wait/tool boundaries and at the top-level return. Cleanup evidence
+also retains the signal, and an interrupted run cannot return success even if a
+callback caught the original exception. Two mocked callback regressions join the
+26 existing helper tests; all 28 pass. A fresh native run is still required.

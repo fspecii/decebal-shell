@@ -170,6 +170,34 @@ class Signals(unittest.TestCase):
         with guard.deferred():
             pass
 
+    def test_callback_swallowed_signal_is_latched_at_next_wait(self):
+        guard = np.SignalGuard()
+        try:
+            guard.handler(signal.SIGTERM, None)
+        except BaseException:
+            pass  # model dbus-python's callback boundary
+        with patch.object(np, 'GUARD', guard):
+            with self.assertRaises(np.Interrupted) as raised:
+                np.wait(lambda: True, 'must not pass after cancellation')
+        self.assertEqual(raised.exception.signum, signal.SIGTERM)
+        with guard.deferred():
+            guard.checkpoint()  # cleanup must remain able to finish
+        with self.assertRaises(np.Interrupted):
+            guard.checkpoint()
+
+    def test_callback_swallowed_signal_cannot_return_a_success_exit(self):
+        guard = np.SignalGuard()
+        def main():
+            try:
+                guard.handler(signal.SIGTERM, None)
+            except BaseException:
+                pass
+            return 0
+        with patch.object(np, 'GUARD', guard), patch.object(guard, 'install'), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as raised:
+                np.run_main(main)
+        self.assertEqual(raised.exception.code, 128 + signal.SIGTERM)
+
     def test_interrupted_is_not_swallowed_by_exception_handlers(self):
         self.assertFalse(issubclass(np.Interrupted, Exception))
         self.assertFalse(issubclass(np.OwnershipLost, np.RETRYABLE))
