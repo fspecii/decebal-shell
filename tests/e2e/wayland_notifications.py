@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DRAFT (never executed): native Wayland gate for decnotify (docs/wayland-notifications.md).
+"""DRAFT acceptance matrix: native Wayland gate for decnotify (docs/wayland-notifications.md).
 
 Everything is private and owned: a fresh evidence directory (refused when it exists, never deleted), a private HOME and
 XDG tree, a private session bus with a fixed configuration (no service activation), and a headless Sway with two outputs
@@ -578,13 +578,15 @@ class Rig:
 def phase_contract(rig):
     """DISPLAY unset, session chosen by backend::session, banner surface contract, no tiled window."""
     rig.start_sink()
-    rig.notify(summary="contract", actions=[("reply", "Reply")])
+    notice = rig.notify(summary="contract", actions=[("reply", "Reply")])
     rig.settle(lambda: rig.banners()["active"], "a banner is shown")
     time.sleep(0.5)
     rig.evidence["banner_contract"] = check_banner_contract(rig.trace(), rig.failures)
     tree = json.dumps(rig.sway_cmd("-t", "get_tree", query=True))
     rig.check("decebal-notifications" not in tree and '"app_id": "decnotify"' not in tree, "contract: a layer-shell banner appears as a tiled/floating window")
     rig.check(rig.daemon.poll() is None, "contract: decnotify exited with DISPLAY unset")
+    rig.call("CloseNotification", "u", notice)
+    rig.settle(lambda: not rig.banners()["active"] and not rig.banners()["queued"], "contract leaves no banner for later phases")
 
 
 def phase_bus(rig):
@@ -620,6 +622,11 @@ def phase_queue(rig):
         promoted = rig.settle(lambda: (lambda b: b if len(b["queued"]) == 1 else None)(rig.banners()), "closing one promotes one queued entry")
         rig.check(promoted is not None and len(promoted["active"]) == 5, "queue: the queue was not promoted into the freed slot")
         rig.settle(lambda: closed_reasons(rig.signals()).get(ids[0]) == 3, "NotificationClosed(id, 3) after CloseNotification")
+    # Drain the long-lived queue before the separate visible-expiry assertion:
+    # queue lifetimes intentionally do not start until promotion.
+    for notice in ids:
+        rig.call("CloseNotification", "u", notice)
+    rig.settle(lambda: not rig.banners()["active"] and not rig.banners()["queued"], "queue drained before visible expiry")
     short = rig.notify(summary="short", timeout=1200)
     rig.settle(lambda: closed_reasons(rig.signals()).get(short) == 1, "expiry reports reason 1", 8)
     resident = rig.notify(summary="resident", actions=[("keep", "Keep")], hints=[("resident", "b", "true")], timeout=60000)

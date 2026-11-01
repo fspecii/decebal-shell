@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DRAFT (never executed): unit tests of the trace and signal parsers of tests/e2e/wayland_notifications.py.
+"""Helper unit tests of the trace and signal parsers of tests/e2e/wayland_notifications.py.
 No compositor, bus, process or desktop connection is used."""
 import importlib.util
 from pathlib import Path
