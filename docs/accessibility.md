@@ -222,3 +222,9 @@ The repaired candidate `0ab32ba` passed `cargo check --locked --offline -j1
 Evidence: `/var/tmp/decebal-launcher-a11y-source-check/result.json`. Regression
 tests are type-checked but have not executed; native accessibility acceptance
 and the remaining source findings are still open.
+
+Modal-tree follow-up: while Session is open, obscured focusable controls and
+selection containers are now advertised disabled with no actions. Session and
+its visible menu rows remain enabled. Existing modal tests now require disabled
+states and validation errors, rather than enabled nodes whose dispatch refuses.
+This follow-up is formatted but has not yet compiled or executed.

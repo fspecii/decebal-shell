@@ -564,14 +564,25 @@ fn row_spec(st: &Styled, e: &Entry, role: Role) -> Spec {
     }
 }
 
+/// Modal state is advertised as well as enforced: background controls expose no actions.
+fn modal_add(st: &Styled, b: &mut TreeBuilder, parent: NodeId, mut spec: Spec) -> Option<NodeId> {
+    let allowed = spec.key == "footer/session" || spec.key == "zone:menu" || spec.key.starts_with("menu/");
+    if has_menu(st) && !allowed && (spec.selection || spec.states.contains(State::Focusable)) {
+        spec = spec.enabled(false).state(State::Focusable, false).state(State::Editable, false);
+        spec.actions.clear();
+        spec.selection = false;
+    }
+    b.add(parent, spec)
+}
+
 fn styled_tree(st: &Styled, es: &[Entry], b: &mut TreeBuilder, frame: NodeId, lists: &mut Lists) {
     // the engine does not publish where a style puts its search box; the field is described without a rectangle
-    b.add(frame, search_spec(&st.m.field, None, placeholder(st.style)));
+    modal_add(st, b, frame, search_spec(&st.m.field, None, placeholder(st.style)));
     match st.busy() {
         // a style's background work (Kickoff reading its places) is a busy status and one polite announcement
         Some(what) => {
-            b.add(frame, Spec::new("status", Role::StatusBar, what).state(State::Showing, true).state(State::Busy, true));
-            b.add(frame, Spec::new("announce:loading", Role::Notification, what));
+            modal_add(st, b, frame, Spec::new("status", Role::StatusBar, what).state(State::Showing, true).state(State::Busy, true));
+            modal_add(st, b, frame, Spec::new("announce:loading", Role::Notification, what));
         }
         None => status(b, frame, st.m.results.len(), st.m.searching()),
     }
@@ -616,48 +627,48 @@ fn zone_nodes(st: &Styled, z: &Zone, mine: &[&Entry], b: &mut TreeBuilder, frame
                 }
                 _ => row_spec(st, e, Role::ListItem),
             };
-            if b.add(parent, spec).is_some() {
+            if modal_add(st, b, parent, spec).is_some() {
                 kids.push(e.key.clone());
             }
         }
         kids
     };
-    let tabs = |b: &mut TreeBuilder, parent: NodeId| -> Vec<String> { entries_of(&[Kind::Tab]).into_iter().filter_map(|e| b.add(parent, tab_spec(st, e)).map(|_| e.key.clone())).collect() };
+    let tabs = |b: &mut TreeBuilder, parent: NodeId| -> Vec<String> { entries_of(&[Kind::Tab]).into_iter().filter_map(|e| modal_add(st, b, parent, tab_spec(st, e)).map(|_| e.key.clone())).collect() };
     let menu = |b: &mut TreeBuilder, parent: NodeId| -> Vec<String> {
-        entries_of(&[Kind::MenuItem]).into_iter().filter_map(|e| b.add(parent, row_spec(st, e, Role::MenuItem)).map(|_| e.key.clone())).collect()
+        entries_of(&[Kind::MenuItem]).into_iter().filter_map(|e| modal_add(st, b, parent, row_spec(st, e, Role::MenuItem)).map(|_| e.key.clone())).collect()
     };
     let only = |n: usize| n == mine.len();
     if only(n_tab) && n_tab > 0 {
-        let Some(c) = b.add(frame, container(&key, Role::PageTabList, &name, bounds)) else { return };
+        let Some(c) = modal_add(st, b, frame, container(&key, Role::PageTabList, &name, bounds)) else { return };
         let children = tabs(b, c);
         lists.insert(key, Group { tabs: true, children });
     } else if only(n_menu) && n_menu > 0 {
         // an open menu is modal: its rows are what can be operated
-        let Some(c) = b.add(frame, container(&key, Role::Menu, &name, bounds).description("Press Escape to close the menu").state(State::Modal, true)) else { return };
+        let Some(c) = modal_add(st, b, frame, container(&key, Role::Menu, &name, bounds).description("Press Escape to close the menu").state(State::Modal, true)) else { return };
         let children = menu(b, c);
         lists.insert(key, Group { tabs: true, children });
     } else if n_button + n_tab + n_menu == 0 {
-        let Some(c) = b.add(frame, container(&key, Role::List, &name, bounds)) else { return };
+        let Some(c) = modal_add(st, b, frame, container(&key, Role::List, &name, bounds)) else { return };
         let children = items(b, c);
         lists.insert(key, Group { tabs: false, children });
     } else {
-        let Some(c) = b.add(frame, container(&key, Role::Panel, &name, bounds)) else { return };
+        let Some(c) = modal_add(st, b, frame, container(&key, Role::Panel, &name, bounds)) else { return };
         if n_list > 0 {
             let inner = format!("{key}/list");
-            if let Some(list) = b.add(c, container(&inner, Role::List, &name, bounds)) {
+            if let Some(list) = modal_add(st, b, c, container(&inner, Role::List, &name, bounds)) {
                 let children = items(b, list);
                 lists.insert(inner, Group { tabs: false, children });
             }
         }
         if n_tab > 0 {
             let inner = format!("{key}/tabs");
-            if let Some(strip) = b.add(c, container(&inner, Role::PageTabList, &name, bounds)) {
+            if let Some(strip) = modal_add(st, b, c, container(&inner, Role::PageTabList, &name, bounds)) {
                 let children = tabs(b, strip);
                 lists.insert(inner, Group { tabs: true, children });
             }
         }
         for e in entries_of(&[Kind::Button]) {
-            b.add(c, button_spec(st, e));
+            modal_add(st, b, c, button_spec(st, e));
         }
     }
 }

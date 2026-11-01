@@ -759,13 +759,20 @@ fn kickoffs_session_menu_is_modal_exposes_its_rows_and_gates_everything_else() {
     assert_eq!(r.focus_key(), Some("menu/menu:lock"), "the first row has the keyboard");
     // everything unrelated is refused while the menu is open
     let app = list_items(&r).into_iter().find(|n| n.key.starts_with("apps/app:")).map(|n| n.key.clone()).expect("an app is showing");
-    assert!(matches!(r.act(&app, Op::Action("activate")), Err(ActionError::Refused(_))));
-    assert!(matches!(r.act(&app, Op::Focus), Err(ActionError::Refused(_))));
-    assert!(matches!(r.act("search", Op::SetText("x".into())), Err(ActionError::Refused(_))));
-    assert!(matches!(r.act("footer/tab:places", click()), Err(ActionError::Refused(_))));
-    assert!(matches!(r.act("footer/sys:sleep", click()), Err(ActionError::Refused(_))));
-    assert!(matches!(r.act("zone:apps", Op::SelectChild(0)), Err(ActionError::Refused(_))));
+    assert!(matches!(r.act(&app, Op::Action("activate")), Err(ActionError::Disabled)));
+    assert!(matches!(r.act(&app, Op::Focus), Err(ActionError::Disabled)));
+    assert!(matches!(r.act("search", Op::SetText("x".into())), Err(ActionError::Disabled)));
+    assert!(matches!(r.act("footer/tab:places", click()), Err(ActionError::Disabled)));
+    assert!(matches!(r.act("footer/sys:sleep", click()), Err(ActionError::Disabled)));
+    assert!(matches!(r.act("zone:apps", Op::SelectChild(0)), Err(ActionError::Disabled)));
     assert!(styled::kde_effects().1.is_empty());
+    for key in [&app, "search", "footer/tab:places", "footer/sys:sleep", "zone:apps"] {
+        let node = r.node(key);
+        assert!(!node.states.contains(State::Enabled), "{key} is obscured by the modal menu");
+        assert!(node.actions.is_empty(), "{key} must not advertise an action");
+    }
+    assert!(r.node("footer/session").states.contains(State::Enabled));
+    assert!(r.node("menu/menu:lock").states.contains(State::Enabled));
     // its rows work: choosing one by the menu's selection, or clicking it
     let out = r.act("menu/menu:lock", click()).unwrap();
     assert_eq!(out.action, Some(Action::Close));
