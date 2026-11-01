@@ -361,7 +361,7 @@ class Rig:
         self.base.update(XDG_RUNTIME_DIR=str(self.run), HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "cfg"), XDG_CACHE_HOME=str(root / "cache"),
                          XDG_DATA_HOME=str(root / "data"), XDG_STATE_HOME=str(root / "state"), XDG_DATA_DIRS=str(root / "data"),
                          DECEBAL_CONFIG=str(root / "cfg" / "decebal"), DECEBAL_THEMES=str(root / "themes"), DECEBAL_SYSTEM_THEMES=str(root / "themes"),
-                         DECEBAL_SYSTEM_AUTOMATIC="0", RDWM_SOCK=str(self.run / "absent-rdwm"), PULSE_SERVER=f"unix:{self.run}/absent-pulse",
+                         DECEBAL_SYSTEM_AUTOMATIC="0", DBUS_SYSTEM_BUS_ADDRESS=f"unix:path={self.run}/absent-system-bus", DBUS_SESSION_BUS_ADDRESS=f"unix:path={self.run}/absent-session-bus", RDWM_SOCK=str(self.run / "absent-rdwm"), PULSE_SERVER=f"unix:{self.run}/absent-pulse",
                          DECEBAL_NATIVE_TOKEN=token, PATH=str(self.bin) + os.pathsep + os.defpath)
         for d in ("home", "cfg/decebal", "cache", "data", "state/decebal", "themes"):
             (root / d).mkdir(parents=True, exist_ok=True)
@@ -392,12 +392,33 @@ class Rig:
                 child.wait(timeout=5)
 
     def close(self):
-        try:
-            for _, proc, _ in reversed(self.children):
-                self.stop(proc)
-        finally:
-            for _, _, fd in self.children:
-                os.close(fd)
+        # Signal every owned child first: cleanup has one bounded grace period,
+        # rather than up to five seconds for each sequential child.
+        for label, proc, fd in reversed(self.children):
+            try:
+                if proc.poll() is None:
+                    signal.pidfd_send_signal(fd, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except Exception as error:
+                self.fail(f"cleanup signal {label}: {error!r}")
+        deadline = time.monotonic() + 6
+        for label, proc, fd in reversed(self.children):
+            try:
+                if proc.poll() is None:
+                    try:
+                        proc.wait(timeout=max(.05, deadline - time.monotonic()))
+                    except subprocess.TimeoutExpired:
+                        FORCED.append(proc.pid)
+                        signal.pidfd_send_signal(fd, signal.SIGKILL)
+                        proc.wait(timeout=1)
+            except Exception as error:
+                self.fail(f"cleanup wait {label}: {error!r}")
+            finally:
+                try:
+                    os.close(fd)
+                except OSError as error:
+                    self.fail(f"cleanup descriptor {label}: {error!r}")
 
     # -- the private bus and compositor
     def start_bus(self):
@@ -905,5 +926,12 @@ def main():
     print("ok")
 
 
+def interrupted(signum, frame):
+    # BaseException bypasses individual phase error handling, reaching main's
+    # finally cleanup immediately when the resource guard requests shutdown.
+    raise KeyboardInterrupt(f"fixture interrupted by signal {signum}")
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, interrupted)
     main()

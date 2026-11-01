@@ -262,3 +262,11 @@ the active sample and zero at idle, and checks the sampled active mappings again
 samples, not a continuous peak/RSS guarantee; compositor/GPU allocations are outside
 the measurement. The fixture also checks the 64 retained-pool counter cap. All 14
 Python helper tests pass; the native fixture remains unrun.
+
+Before its first native run, fixture isolation was hardened: both default D-Bus
+addresses point to private absent sockets until the explicit private session bus
+is selected. SIGTERM raises an interruption outside phase error handling so the
+main finally block runs. Cleanup signals all owned pidfds first, shares a six-second
+grace period and continues closing other children/descriptors after an individual
+error. Sixteen parser/measurement/cleanup helper tests pass. This does not replace
+a real resource-abort cleanup test; forced or rescued children still fail the gate.

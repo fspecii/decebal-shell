@@ -4,10 +4,32 @@ No compositor, bus, process or desktop connection is used."""
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("notify_fixture", Path(__file__).parent / "e2e/wayland_notifications.py")
 FIXTURE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FIXTURE)
+
+
+class CleanupTests(unittest.TestCase):
+    def test_a_child_error_does_not_skip_other_children_or_pidfds(self):
+        rig = object.__new__(FIXTURE.Rig)
+        a, b = Mock(pid=100), Mock(pid=101)
+        a.poll.return_value = b.poll.return_value = None
+        rig.children = [("a", a, 70), ("b", b, 71)]
+        rig.failures = []
+        b.wait.side_effect = OSError("injected wait error")
+        with patch.object(FIXTURE.signal, "pidfd_send_signal") as send, patch.object(FIXTURE.os, "close") as close:
+            rig.close()
+        self.assertEqual(send.call_count, 2)
+        a.wait.assert_called_once()
+        self.assertEqual({call.args[0] for call in close.call_args_list}, {70, 71})
+        self.assertTrue(any("cleanup wait b" in f for f in rig.failures))
+
+    def test_termination_bypasses_phase_error_handler(self):
+        with self.assertRaises(KeyboardInterrupt):
+            FIXTURE.interrupted(15, None)
+
 
 GOOD = """
 [1.0][rs] -> zwlr_layer_shell_v1@6.get_layer_surface(zwlr_layer_surface_v1@19, wl_surface@18, nil, 2, Some("decebal-notifications"))
