@@ -216,3 +216,9 @@ by activation, returning to the explicit two-press flow, and single-line text.
 These repairs have passed rustfmt/whitespace checks only; build/test and native
 AT-SPI/Orca acceptance are pending. Other review findings (modal disabled states,
 non-search empty announcements and launchability caching) remain open.
+
+The repaired candidate `0ab32ba` passed `cargo check --locked --offline -j1
+--all-targets` with unchanged source fingerprints and no resource interruption.
+Evidence: `/var/tmp/decebal-launcher-a11y-source-check/result.json`. Regression
+tests are type-checked but have not executed; native accessibility acceptance
+and the remaining source findings are still open.
