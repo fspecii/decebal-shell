@@ -253,3 +253,12 @@ all-target compilation also passed with stable source fingerprints. Evidence:
 `/var/tmp/decebal-notify-present-unit-pool-count/` and
 `/var/tmp/decebal-notify-pool-count-qualified-check/`. Native /proc mapping/fd
 measurements are still required; internal counters alone do not prove RSS.
+
+The draft churn fixture now samples kernel `/proc/<owned-daemon>/maps` notification
+memfd mappings, open-fd count and RSS before churn, after churn with banners active,
+and after surfaces retire. It requires nonzero identified notification shm during
+the active sample and zero at idle, and checks the sampled active mappings against
+96 MiB. Only aggregate measurements are retained, not mapping paths. These are
+samples, not a continuous peak/RSS guarantee; compositor/GPU allocations are outside
+the measurement. The fixture also checks the 64 retained-pool counter cap. All 14
+Python helper tests pass; the native fixture remains unrun.

@@ -141,6 +141,18 @@ PRESENT = {
 
 
 class PresentationBounds(unittest.TestCase):
+    def test_kernel_mapping_sample_counts_only_notification_shm(self):
+        maps = "1000-3000 rw-s 0 00:01 1 /memfd:smithay-client-toolkit (deleted)\n"
+        maps += "3000-8000 rw-p 0 00:00 0 [heap]\n"
+        maps += "8000-9000 rw-s 0 00:01 2 /memfd:another-client (deleted)\n"
+        maps += "a000-b000 rw-s 0 00:01 3 /memfd:smithay-client-toolkit (deleted)\n"
+        self.assertEqual(FIXTURE.shm_mapping_bytes(maps), 3 * 4096)
+
+    def test_total_retained_pool_cap_is_checked(self):
+        failures = []
+        FIXTURE.check_presentation_bounds("", dict(PRESENT, total_buffers=65), failures, "t")
+        self.assertTrue(any("pool count" in f for f in failures))
+
     def test_buffers_alive_at_once_are_counted_per_surface_including_held_ones(self):
         peaks, created = FIXTURE.buffer_peaks(buffers([31, 32, 33, -31, 34]))
         self.assertEqual(peaks, {18: 3})

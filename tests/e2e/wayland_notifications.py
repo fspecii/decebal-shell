@@ -283,6 +283,17 @@ def callback_peaks(trace):
     return peak, requested
 
 
+def shm_mapping_bytes(maps):
+    """Independent kernel mapping size, without retaining or reporting mapping paths."""
+    total = 0
+    for line in maps.splitlines():
+        fields = line.split(maxsplit=5)
+        if len(fields) == 6 and fields[5].startswith('/memfd:smithay-client-toolkit'):
+            start, end = (int(v, 16) for v in fields[0].split('-'))
+            total += end - start
+    return total
+
+
 def check_presentation_bounds(trace, present, failures, label):
     """Per surface at most 3 buffers and 2 frame callbacks alive, on the wire and in the daemon's own counters."""
     buffers, created = buffer_peaks(trace)
@@ -302,6 +313,8 @@ def check_presentation_bounds(trace, present, failures, label):
                 failures.append(f"{label}: surface {s['id']} holds {s['buffers']} buffers / {s.get('alloc_bytes', s['bytes'])} shm bytes")
         if present["total_bytes"] > limits["total_bytes"]:
             failures.append(f"{label}: {present['total_bytes']} shm bytes in use, past the {limits['total_bytes']} budget")
+        if present.get("total_buffers", 0) > limits.get("total_buffers", 64):
+            failures.append(f"{label}: total retained pool count exceeds its budget")
         # every buffer owns an exact-size pool: the pool lengths the library reports must stay within the modelled bytes
         if present.get("pool_bytes", 0) > present["total_bytes"]:
             failures.append(f"{label}: pools total {present['pool_bytes']} bytes, past the {present['total_bytes']} the budget counted")
@@ -442,6 +455,16 @@ class Rig:
         """The daemon's presentation counters (buffers, frame callbacks, commits), or None before the first commit."""
         path = self.root / f"{label or self.daemon_label}-present.json"
         return json.loads(path.read_text()) if path.exists() and path.stat().st_size else None
+
+    def shm_sample(self):
+        # Popen keeps an exited child unreaped until poll(), preventing PID reuse
+        # between the initial liveness check and these read-only /proc reads.
+        assert self.daemon.poll() is None, "cannot sample an exited notification daemon"
+        proc = Path(f"/proc/{self.daemon.pid}")
+        sample = {"mapped_shm_bytes": shm_mapping_bytes((proc / "maps").read_text()),
+                  "fd_count": len(list((proc / "fd").iterdir())), "rss_kb": self.rss_kb()}
+        assert self.daemon.poll() is None, "notification daemon exited while sampled"
+        return sample
 
     def rss_kb(self):
         for line in Path(f"/proc/{self.daemon.pid}/status").read_text().splitlines():
@@ -799,6 +822,7 @@ def phase_churn(rig):
     rig.sway_cmd("focus", "output", "HEADLESS-1")
     ids = [rig.notify(summary=f"churn {i}", actions=[("reply", "Reply")], timeout=60000) for i in range(3)]
     rig.settle(lambda: len(rig.banners()["active"]) >= 3, "banners before the churn")
+    rig.evidence["churn_kernel_before"] = rig.shm_sample()
     rss_before = rig.rss_kb()
     for cycle in range(3):
         # one IPC call per cycle: the scale changes follow each other with no pause
@@ -810,6 +834,10 @@ def phase_churn(rig):
     time.sleep(1.5)
     present = rig.present()
     rig.evidence["churn"] = check_presentation_bounds(rig.trace(), present, rig.failures, "churn")
+    rig.evidence["churn_kernel_peak_sample"] = rig.shm_sample()
+    rig.check(rig.evidence["churn_kernel_peak_sample"]["mapped_shm_bytes"] > 0, "churn: no notification shm mappings identified while banners are active")
+    rig.check(rig.evidence["churn_kernel_peak_sample"]["mapped_shm_bytes"] <= 96 << 20,
+              "churn: kernel shm mappings exceed 96 MiB (sample, not continuous peak)")
     rig.check(rig.daemon.poll() is None, "churn: the daemon died")
     # idle again: close the panel and every banner; buffers of gone surfaces are released and the pool shrinks
     rig.type("-k", "Escape")  # closes the panel when it is open (the sink only records the key otherwise)
@@ -819,6 +847,8 @@ def phase_churn(rig):
     idle = rig.settle(lambda: (lambda p: p if p and not p["surfaces"] and p["graveyard"] == 0 and p["pool_bytes"] <= POOL_IDLE_BYTES else None)(rig.present()),
                       "no surfaces, no held buffers and no shm pools after the churn", 10)
     rig.evidence["churn_idle"] = idle
+    rig.evidence["churn_kernel_idle"] = rig.shm_sample()
+    rig.check(rig.evidence["churn_kernel_idle"]["mapped_shm_bytes"] == 0, "churn: notification shm mappings remain at idle")
     growth = rig.rss_kb() - rss_before
     rig.check(growth < 16 * 1024, f"churn: resident memory grew {growth} kB across the churn")
 
