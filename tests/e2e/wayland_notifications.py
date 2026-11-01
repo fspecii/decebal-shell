@@ -368,6 +368,7 @@ class Rig:
         self.bus_address = f"unix:path={self.run}/bus"
         self.sway = self.wayland = self.ipc = self.bus = self.daemon = None
         self.sink = self.sink_log = self.monitor = self.monitor_log = None
+        self.pointer = None
 
     # -- generic child handling
     def spawn(self, label, argv, env, stdout=None):
@@ -392,6 +393,11 @@ class Rig:
                 child.wait(timeout=5)
 
     def close(self):
+        if getattr(self, "pointer", None) is not None:
+            try:
+                self.pointer.close()
+            except Exception as error:
+                self.fail(f"cleanup virtual pointer: {error!r}")
         # Signal every owned child first: cleanup has one bounded grace period,
         # rather than up to five seconds for each sequential child.
         for label, proc, fd in reversed(self.children):
@@ -436,6 +442,14 @@ class Rig:
         self.wayland = sock
         self.ipc = wait_for(lambda: next((p for p in self.run.glob("sway-ipc.*.sock") if socket_owned(self.sway, p)), None), 5, "owned sway IPC")
         self.sway_cmd("focus", "output", "HEADLESS-1")
+        self.pointer = POPUP.VirtualPointer(self.sway, sock)
+        self.spawn("keyboard-holder", [shutil.which("wtype"), "-s", "3600000"], self.client_env())
+        def input_ready():
+            self.pointer.sync()
+            return self.pointer.capabilities & 3 == 3
+        wait_for(input_ready, 5, "owned virtual pointer and persistent keyboard advertised")
+        self.evidence["input_devices"] = {"seat_capabilities": self.pointer.capabilities,
+                                          "pointer": True, "persistent_keyboard": True}
 
     def sway_cmd(self, *args, query=False):
         assert socket_owned(self.sway, self.ipc), "private sway IPC ownership changed"
@@ -516,6 +530,8 @@ class Rig:
         wait_for(lambda: ready.exists(), 8, "native sink mapped")
         node = wait_for(self.sink_node, 5, "sink in the tree")
         self.sway_cmd(f'[con_id={node["id"]}] focus')
+        self.type("preflight")
+        wait_for(lambda: self.sink_bytes().endswith(b"preflight"), 5, "native input preflight reaches the sink")
 
     def sink_node(self):
         def walk(n):
@@ -578,6 +594,7 @@ class Rig:
 def phase_contract(rig):
     """DISPLAY unset, session chosen by backend::session, banner surface contract, no tiled window."""
     rig.start_sink()
+    rig.settle(lambda: "get_pointer" in rig.trace(), "notification client binds the advertised pointer")
     notice = rig.notify(summary="contract", actions=[("reply", "Reply")])
     rig.settle(lambda: rig.banners()["active"], "a banner is shown")
     time.sleep(0.5)
