@@ -59,7 +59,7 @@ or a list that is cut at the card has no node and so no action.
 | Part | Roles and interfaces |
 | --- | --- |
 | Search | `entry` (Text, EditableText, caret, selection, placeholder as in the style; action `activate` opens the selected app, or the first result). Its extents are exact in the Launchpad and Dux; the style engine does not publish where a styled launcher puts its search box, so there it has none |
-| Status | `status bar` "N results" / "No matching apps" while searching; a `notification` "No matching apps" appears once when a search reaches no match (announced). Typing and result counts that merely change are not announced |
+| Status | `status bar` "N results" / "No matching apps" while searching; a `notification` "No matching apps" appears once when a search reaches no match (announced). Outside a search, an empty list that the style paints a text over (Kickoff's "Nothing here yet...", Whisker's "Empty: right-click...", BlackBerry's "Nothing here yet") is the `status bar` with those very words plus one polite `notification` (`announce:nothing`) while it lasts. Typing, hovering, key moves and result counts that merely change are not announced |
 | App lists | `list` (Selection) of `list item`s, one per app, named after the app, described by its desktop `Comment=` (and "Pinned"), `posinset`/`setsize` attributes, Selected for the highlighted one. Actions `activate` (open), and in the styled launchers `pin` / `unpin`. An app that cannot start (missing `TryExec`) is disabled |
 | Letter headings | `heading` (level 2) in alphabetical lists |
 | Categories, views, widget tabs, page dots | `page tab list` of `page tab`s (Selection); the current view or page is Selected; action `click` shows it |
@@ -214,8 +214,9 @@ button remains the confirmation route. SetText now filters control characters
 like keyboard input. New tests cover direct search activation, focus followed
 by activation, returning to the explicit two-press flow, and single-line text.
 These repairs have passed rustfmt/whitespace checks only; build/test and native
-AT-SPI/Orca acceptance are pending. Other review findings (modal disabled states,
-non-search empty announcements and launchability caching) remain open.
+AT-SPI/Orca acceptance are pending. Modal disabled states were repaired in
+`1ad235a`; non-search empty announcements are described below; launchability
+caching remains open.
 
 The repaired candidate `0ab32ba` passed `cargo check --locked --offline -j1
 --all-targets` with unchanged source fingerprints and no resource interruption.
@@ -228,3 +229,22 @@ selection containers are now advertised disabled with no actions. Session and
 its visible menu rows remain enabled. Existing modal tests now require disabled
 states and validation errors, rather than enabled nodes whose dispatch refuses.
 This follow-up is formatted but has not yet compiled or executed.
+
+### Empty lists outside a search (awaiting execution)
+
+The words a style paints over a list with nothing in it come from one function
+per style (`empty_text` in `kde.rs`, `xfce.rs`, `blackberry.rs`) that both the
+painting and the accessibility tree call (`Styled::empty_note`), so the screen
+reader is told exactly what is shown and a change of wording cannot leave the two
+apart. The tree has an inert `status bar` with those words and one polite
+`notification` while the list is empty; both persist across redraws, hovering and
+key moves, so nothing is announced twice, and the announcement is made again only
+after the list had been non-empty. While Kickoff reads its places (`Styled::busy`)
+there is no empty note: the busy status and "Reading places..." announcement stand
+in, and the empty words appear only when the read has finished with nothing. A
+search with no match keeps its own status and announcement ("No matching apps").
+
+Not covered: Windows paints two hints (no pinned apps; no recent apps) only when
+its Recommended block fits, a decision made from geometry private to that style, so
+Windows, GNOME and UKUI (which list every app and paint no such text) have no empty
+note. Source tests for all of this are written and have not been built or run.

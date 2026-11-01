@@ -76,6 +76,15 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     zones
 }
 
+/// The words painted over a grid with nothing in it; the screen reader is told the same ones (`Styled::empty_note`).
+pub fn empty_text(m: &Model, zones: &[Zone]) -> Option<&'static str> {
+    if m.searching() {
+        m.results.is_empty().then_some("No results")
+    } else {
+        zones.first().is_some_and(|z| z.items.is_empty()).then_some("Nothing here yet")
+    }
+}
+
 pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let th = crate::theme::th();
     let s = p.s;
@@ -150,10 +159,8 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
             }
         }
     }
-    if m.searching() && m.results.is_empty() {
-        p.text_center("No results", f.grid.x + f.grid.w / 2.0, f.grid.y + 60.0 * s, 16.0 * s, Weight::Regular, sub, f.grid.w);
-    } else if !m.searching() && zones.first().is_some_and(|z| z.items.is_empty()) {
-        p.text_center("Nothing here yet", f.grid.x + f.grid.w / 2.0, f.grid.y + 60.0 * s, 16.0 * s, Weight::Regular, sub, f.grid.w);
+    if let Some(msg) = empty_text(m, zones) {
+        p.text_center(msg, f.grid.x + f.grid.w / 2.0, f.grid.y + 60.0 * s, 16.0 * s, Weight::Regular, sub, f.grid.w);
     }
 
     // The bottom bar: universal search on the left, the page indicator (Hub glyph first) in the middle.

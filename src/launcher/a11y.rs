@@ -6,7 +6,7 @@
 //! Windows, GNOME, KDE, Xfce, BlackBerry and UKUI styles from the engine's [`Zone`]s, i.e. the geometry the style
 //! really laid out and painted, so a style that adds or moves a control is described without a change here.
 //!
-//! Keys (stable node ids): `frame`, `search`, `search:clear` (Dux), `status`, `announce:empty`, `announce:loading`,
+//! Keys (stable node ids): `frame`, `search`, `search:clear` (Dux), `status`, `announce:empty`, `announce:nothing`, `announce:loading`,
 //! `zone:<zone>` (a list, tab strip or group; `zone:<zone>/list` for the apps inside a mixed group) and, for the
 //! things inside a zone (`results` counts as `apps`: search results replace the list), `<zone>/app:<desktop id>`, `<zone>/letter:<c>`, `<zone>/view:<view>`, `<zone>/page:<n>`,
 //! `detail/open:<desktop id>`, `detail/pin:<desktop id>`, `<zone>/settings|power|account|computer|fullscreen|clear|close`, and the style's own `<zone>/<semantic key>` (`footer/tab:places`,
@@ -584,7 +584,15 @@ fn styled_tree(st: &Styled, es: &[Entry], b: &mut TreeBuilder, frame: NodeId, li
             modal_add(st, b, frame, Spec::new("status", Role::StatusBar, what).state(State::Showing, true).state(State::Busy, true));
             modal_add(st, b, frame, Spec::new("announce:loading", Role::Notification, what));
         }
-        None => status(b, frame, st.m.results.len(), st.m.searching()),
+        None => {
+            status(b, frame, st.m.results.len(), st.m.searching());
+            // an empty list outside a search: the words the style paints, read on demand and announced once while it lasts
+            // (the same nodes persist across redraws and hovering, so nothing is announced again)
+            if let Some(text) = st.empty_note() {
+                modal_add(st, b, frame, Spec::new("status", Role::StatusBar, text).state(State::Showing, true));
+                modal_add(st, b, frame, Spec::new("announce:nothing", Role::Notification, text));
+            }
+        }
     }
     let mut zones: Vec<&Zone> = st.zones.iter().collect();
     zones.sort_by_key(|z| ORDER.iter().position(|o| *o == z.id).unwrap_or(ORDER.len()));
@@ -946,7 +954,7 @@ pub(super) fn act(l: &mut Launcher, t: &Target) -> Result<Response, ActionError>
             o => Err(ActionError::Unsupported(format!("{o:?} on a list"))),
         };
     }
-    if matches!(key.as_str(), "frame" | "status" | "announce:empty" | "announce:loading") {
+    if matches!(key.as_str(), "frame" | "status" | "announce:empty" | "announce:nothing" | "announce:loading") {
         return match &op {
             Op::ScrollTo => Ok(Response::NONE),
             o => Err(ActionError::Unsupported(format!("{o:?} on {key}"))),

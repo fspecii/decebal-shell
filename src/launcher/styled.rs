@@ -989,6 +989,21 @@ impl Styled {
         }
     }
 
+    /// The words the style paints over a list that has nothing in it outside a search ("Nothing here yet"), taken from
+    /// the same function its painting uses. `None` while something is still loading (an empty list is not empty yet)
+    /// and for styles that paint no such text.
+    pub fn empty_note(&self) -> Option<&'static str> {
+        if self.m.searching() || self.busy().is_some() {
+            return None;
+        }
+        match self.style {
+            LauncherStyle::Kde => kde::empty_text(&self.m, &self.zones),
+            LauncherStyle::Xfce => xfce::empty_text(&self.m, &self.zones),
+            LauncherStyle::BlackBerry => blackberry::empty_text(&self.m, &self.zones),
+            _ => None,
+        }
+    }
+
     /// Something the style is still loading in the background, in words (Kickoff's Places).
     pub fn busy(&self) -> Option<&'static str> {
         match self.style {

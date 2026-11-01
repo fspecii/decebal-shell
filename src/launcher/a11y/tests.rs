@@ -11,6 +11,8 @@ use crate::a11y::action::validate;
 use crate::a11y::tree::{stamp, Ids, Node, Tree, WindowInfo};
 use crate::a11y::Request;
 use crate::app::Button;
+use crate::fuzzy::History;
+use crate::launcher::catalog::Catalog;
 use crate::launcher::styled;
 use crate::launcher::styled::tests as sty;
 use std::cell::RefCell;
@@ -112,6 +114,21 @@ impl Rig {
         let prev = std::mem::take(&mut self.tree);
         stamp(if prev.is_empty() { None } else { Some(&prev) }, &mut t);
         self.tree = t;
+    }
+
+    /// Redraws and returns the politeness of every announcement the screen reader would be sent for the change
+    /// (the real event diff of the bridge, as it computes it when the tree changes).
+    fn announcements(&mut self) -> Vec<i64> {
+        let old = self.tree.clone();
+        self.redraw();
+        let ctx = crate::a11y::atspi::Ctx {
+            unique: ":1.7".into(),
+            parent: Some(("org.a11y.atspi.Registry".into(), "/org/a11y/atspi/accessible/root".into())),
+            app_id: 3,
+            locale: "C".into(),
+            toolkit_version: "0".into(),
+        };
+        crate::a11y::atspi::events(&ctx, &old, &self.tree).iter().filter(|m| m.member == "Announcement").map(|m| m.args().map_or(-1, |v| v[1].as_int().unwrap_or(-1) as i64)).collect()
     }
 
     fn find(&self, key: &str) -> Option<&Node> {
@@ -892,5 +909,154 @@ fn setting_accessible_search_text_uses_single_line_keyboard_filtering() {
         r.act("search", Op::SetText("a\nb\tc\r".into())).unwrap();
         let text = r.l.styled.as_ref().map(|st| st.m.field.text()).unwrap_or_else(|| r.l.field.text());
         assert_eq!(text, "abc");
+    }
+}
+
+// ------------------------------------------------------------------------------------------------ empty lists, no query
+
+/// A launcher of `style` whose favourites are empty (nothing pinned).
+fn without_favorites(style: LauncherStyle) -> Styled {
+    let mut st = open(style, 12, SCREEN);
+    let apps = st.m.cat.apps.clone();
+    st.m.cat = Catalog::with(apps, Some(Vec::new()), History::default());
+    st.relayout();
+    st
+}
+
+/// The launchers that paint a text over an empty list outside a search, with what they paint:
+/// (name, launcher showing an empty list, the painted words).
+fn empty_lists() -> Vec<(&'static str, Styled, &'static str)> {
+    styled::kde_install_places(Vec::new(), Vec::new());
+    let mut places = open(LauncherStyle::Kde, 12, SCREEN);
+    places.m.ui.insert("kde.tab", 1);
+    places.m.ui.insert("kde.place", 1); // History: no recent app and no document
+    places.relayout();
+    let mut hub = without_favorites(LauncherStyle::BlackBerry);
+    hub.m.view = View::Favorites;
+    hub.relayout();
+    vec![
+        ("Kickoff favorites", without_favorites(LauncherStyle::Kde), "Nothing here yet: right-click an app to add it to Favorites"),
+        ("Kickoff history", places, "Nothing here yet"),
+        ("Whisker favorites", without_favorites(LauncherStyle::Xfce), "Empty: right-click an app to add it to Favorites"),
+        ("BlackBerry favorites", hub, "Nothing here yet"),
+    ]
+}
+
+#[test]
+fn an_empty_list_outside_a_search_is_a_status_and_one_polite_announcement() {
+    for (what, st, words) in empty_lists() {
+        let apps = st.zones.iter().find(|z| z.id == "apps").unwrap_or_else(|| panic!("{what}: an apps list"));
+        assert!(apps.items.is_empty(), "{what}: the list on screen really is empty");
+        assert_eq!(st.empty_note(), Some(words), "{what}: the style's own words");
+        let r = Rig::new(wrap(st));
+        let status = r.node("status");
+        assert_eq!((status.role, status.name.as_str()), (Role::StatusBar, words), "{what}");
+        assert!(status.actions.is_empty() && !status.states.contains(State::Focusable), "{what}: inert");
+        let note = r.node("announce:nothing");
+        assert_eq!((note.role, note.name.as_str()), (Role::Notification, words), "{what}");
+        assert!(r.find("announce:empty").is_none() && r.find("announce:loading").is_none(), "{what}: only the empty-list announcement");
+        assert!(r.node("zone:apps").children.is_empty(), "{what}: and the list has no rows");
+    }
+}
+
+#[test]
+fn the_empty_list_announcement_happens_once_and_again_only_after_it_went_away() {
+    for (what, st, _) in empty_lists() {
+        let mut r = Rig::new(wrap(st));
+        // nothing changes the lists: redraws, a keyboard move and hovering announce nothing
+        assert!(r.announcements().is_empty(), "{what}: a redraw");
+        let ids = app_keys(r.l.app_list());
+        let over = entries(&r.l, &ids).into_iter().find(|e| e.zone == "cats").unwrap_or_else(|| panic!("{what}: a category row to hover"));
+        let (cx, cy) = (over.rect.0 as f32 + over.rect.2 as f32 / 2.0, over.rect.1 as f32 + over.rect.3 as f32 / 2.0);
+        r.l.styled.as_mut().unwrap().motion(cx, cy);
+        assert!(r.announcements().is_empty(), "{what}: hovering");
+        r.l.key(&key(Key::Down, ""));
+        assert!(r.announcements().is_empty(), "{what}: a key");
+        assert!(r.find("announce:nothing").is_some(), "{what}: still empty");
+        // pin an app where the list is the favorites: the lists fill and the words go
+        let st = r.l.styled.as_mut().unwrap();
+        if what.contains("history") {
+            styled::kde_install_places(Vec::new(), vec![entry("notes.txt", "~/Documents", &["xdg-open", "/n"])]);
+        } else {
+            st.m.cat.toggle_favorite(0);
+        }
+        st.relayout();
+        assert!(r.announcements().is_empty(), "{what}: filling announces nothing");
+        assert!(r.find("announce:nothing").is_none() && r.find("status").is_none(), "{what}: not empty any more");
+        // and empty again: announced once
+        let st = r.l.styled.as_mut().unwrap();
+        if what.contains("history") {
+            styled::kde_install_places(Vec::new(), Vec::new());
+        } else {
+            st.m.cat.toggle_favorite(0);
+        }
+        st.relayout();
+        assert_eq!(r.announcements(), [1], "{what}: one polite announcement");
+        assert!(r.announcements().is_empty(), "{what}: and not again");
+    }
+}
+
+#[test]
+fn kickoffs_places_are_not_called_empty_while_they_load() {
+    let (hold, gate) = std::sync::mpsc::channel::<()>();
+    let mut st = open(LauncherStyle::Kde, 12, SCREEN);
+    st.m.ui.insert("kde.tab", 1);
+    st.m.ui.insert("kde.place", 1);
+    styled::kde_hold_places(gate);
+    st.relayout();
+    assert!(st.zones.iter().find(|z| z.id == "apps").is_some_and(|z| z.items.is_empty()), "the list is empty while the read runs (and is painted so)");
+    assert_eq!(st.empty_note(), None);
+    let mut r = Rig::new(wrap(st));
+    assert_eq!(r.node("status").name, "Reading places...");
+    assert!(r.find("announce:loading").is_some() && r.find("announce:nothing").is_none(), "loading, not empty");
+    // the read finishes with nothing to show: now it is empty, and that is announced once
+    styled::kde_install_places(Vec::new(), Vec::new());
+    r.l.styled.as_mut().unwrap().relayout();
+    assert_eq!(r.announcements(), [1]);
+    assert_eq!(r.node("status").name, "Nothing here yet");
+    assert!(r.find("announce:loading").is_none());
+    drop(hold);
+}
+
+#[test]
+fn a_search_with_no_match_keeps_its_own_announcement_not_the_empty_list_one() {
+    for (what, st, _) in empty_lists() {
+        let mut r = Rig::new(wrap(st));
+        r.act("search", Op::SetText("zzzzzz".into())).unwrap();
+        assert_eq!(r.node("status").name, "No matching apps", "{what}");
+        assert!(r.find("announce:empty").is_some() && r.find("announce:nothing").is_none(), "{what}");
+        r.act("search", Op::SetText(String::new())).unwrap();
+        assert!(r.find("announce:empty").is_none() && r.find("announce:nothing").is_some(), "{what}: back to the empty list");
+    }
+}
+
+#[test]
+fn styles_that_paint_no_empty_list_text_stay_silent() {
+    // GNOME and UKUI list every app, so an empty favorites list paints nothing; Windows' pin hint is only painted when
+    // its Recommended block fits, which depends on geometry private to that style, and is not described yet
+    for style in [LauncherStyle::Gnome, LauncherStyle::Ukui] {
+        let st = without_favorites(style);
+        assert_eq!(st.empty_note(), None, "{style:?}");
+        let r = Rig::new(wrap(st));
+        assert!(r.find("announce:nothing").is_none() && r.find("status").is_none(), "{style:?}");
+    }
+}
+
+/// The words the screen reader is told come from the function the painting uses, not from a copy of them.
+#[test]
+fn the_painted_empty_words_exist_once_in_each_style() {
+    for (name, src, words) in [
+        ("kde", include_str!("../styled/kde.rs"), &["Nothing here yet", "No matches"][..]),
+        ("xfce", include_str!("../styled/xfce.rs"), &["Empty: right-click", "No matches"][..]),
+        ("blackberry", include_str!("../styled/blackberry.rs"), &["Nothing here yet", "No results"][..]),
+    ] {
+        let start = src.find("pub fn empty_text").unwrap_or_else(|| panic!("{name}: empty_text"));
+        let end = src[start..].find("pub fn paint").map(|i| start + i).unwrap_or_else(|| panic!("{name}: paint follows"));
+        for w in words {
+            let outside = src[..start].matches(w).count() + src[end..].matches(w).count();
+            assert_eq!(outside, 0, "{name}: {w:?} is painted from empty_text only");
+            assert!(src[start..end].contains(w), "{name}: {w:?} lives in empty_text");
+        }
+        assert!(src[end..].contains("empty_text(m, zones)"), "{name}: painting calls empty_text");
     }
 }

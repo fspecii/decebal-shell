@@ -520,6 +520,18 @@ fn scrollbar(p: &mut Painter, z: &Zone, offset: usize, x: f32, w: f32, track: ti
     p.fill(Rect { y: a.y + a.h * (z.first(offset) as f32 / n), h: (a.h * shown as f32 / n).max(4.0), ..bar }, w / 2.0, thumb);
 }
 
+/// The words painted over a list with nothing in it; the screen reader is told the same ones (`Styled::empty_note`).
+pub fn empty_text(m: &Model, zones: &[Zone]) -> Option<&'static str> {
+    let empty = if m.searching() { m.results.is_empty() } else { zones.iter().find(|z| z.id == "apps").is_some_and(|z| z.items.is_empty()) };
+    empty.then_some(if m.searching() {
+        "No matches"
+    } else if tab(m) == 1 {
+        "Nothing here yet"
+    } else {
+        "Nothing here yet: right-click an app to add it to Favorites"
+    })
+}
+
 pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let th = crate::theme::th();
     let s = p.s;
@@ -699,15 +711,7 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     if tab(m) == 1 && places::state() == places::State::Loading && !m.searching() {
         p.text_center("Reading places...", f.content.x + f.content.w / 2.0, f.content.bottom() - 10.0 * s, 11.0 * s, Weight::Regular, sub, f.content.w - 16.0 * s);
     }
-    let empty = if m.searching() { m.results.is_empty() } else { zones.iter().find(|z| z.id == "apps").is_some_and(|z| z.items.is_empty()) };
-    if empty {
-        let msg = if m.searching() {
-            "No matches"
-        } else if tab(m) == 1 {
-            "Nothing here yet"
-        } else {
-            "Nothing here yet: right-click an app to add it to Favorites"
-        };
+    if let Some(msg) = empty_text(m, zones) {
         p.text_center(msg, f.content.x + f.content.w / 2.0, f.content.y + 40.0 * s, 13.0 * s, Weight::Regular, sub, f.content.w - 24.0 * s);
     }
 

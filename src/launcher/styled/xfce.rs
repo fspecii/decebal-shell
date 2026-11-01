@@ -55,6 +55,12 @@ pub fn layout(m: &Model, r: Rect, s: f32) -> Vec<Zone> {
     vec![list, cats, Zone::fixed("actions", vec![(Target::Settings, settings), (Target::Power, power)])]
 }
 
+/// The words painted over a list with nothing in it; the screen reader is told the same ones (`Styled::empty_note`).
+pub fn empty_text(m: &Model, zones: &[Zone]) -> Option<&'static str> {
+    let empty = if m.searching() { m.results.is_empty() } else { zones.first().is_some_and(|z| z.items.is_empty()) };
+    empty.then_some(if m.searching() { "No matches" } else { "Empty: right-click an app to add it to Favorites" })
+}
+
 pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
     let th = crate::theme::th();
     let s = p.s;
@@ -139,9 +145,7 @@ pub fn paint(m: &Model, zones: &[Zone], r: Rect, p: &mut Painter) {
             }
         }
     }
-    let empty = if m.searching() { m.results.is_empty() } else { zones.first().is_some_and(|z| z.items.is_empty()) };
-    if empty {
-        let msg = if m.searching() { "No matches" } else { "Empty: right-click an app to add it to Favorites" };
+    if let Some(msg) = empty_text(m, zones) {
         p.text_center(msg, f.list.x + f.list.w / 2.0, f.list.y + 24.0 * s, 12.0 * s, Weight::Regular, sub, f.list.w - 12.0 * s);
     }
     // the divider between apps and categories
