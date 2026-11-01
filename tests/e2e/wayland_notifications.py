@@ -294,6 +294,15 @@ def shm_mapping_bytes(maps):
     return total
 
 
+def history_input_ready(history, present):
+    if not history or not present:
+        return None
+    surfaces = present["surfaces"]
+    panel = any(s["id"] == history["window"] and s["kind"] == "Panel" and s["configured"] and s["buffers"] > 0 for s in surfaces)
+    catchers = sum(s["kind"] == "Catcher" and s["configured"] and s["buffers"] > 0 for s in surfaces)
+    return history if panel and catchers == 2 else None
+
+
 def check_presentation_bounds(trace, present, failures, label):
     """Per surface at most 3 buffers and 2 frame callbacks alive, on the wire and in the daemon's own counters."""
     buffers, created = buffer_peaks(trace)
@@ -501,6 +510,9 @@ class Rig:
         assert self.daemon.poll() is None, "notification daemon exited while sampled"
         return sample
 
+    def history_ready(self):
+        return history_input_ready(self.history(), self.present())
+
     def rss_kb(self):
         for line in Path(f"/proc/{self.daemon.pid}/status").read_text().splitlines():
             if line.startswith("VmRSS:"):
@@ -706,15 +718,7 @@ def phase_history(rig):
         trace_at = len(rig.trace())
         destroyed = trace_count(rig.trace(), "zwlr_layer_surface_v1", "destroy")
         rig.cli("history", "show")
-        def panel_ready():
-            h, p = rig.history(), rig.present()
-            if not h or not p:
-                return None
-            live = p["surfaces"]
-            panel = any(s["id"] == h["window"] and s["kind"] == "Panel" and s["configured"] and s["buffers"] > 0 for s in live)
-            catchers = sum(s["kind"] == "Catcher" and s["configured"] and s["buffers"] > 0 for s in live)
-            return h if panel and catchers == 2 else None
-        panel = rig.settle(panel_ready, f"{case}: current panel and both catchers committed")
+        panel = rig.settle(rig.history_ready, f"{case}: current panel and both catchers committed")
         rig.settle(lambda: not rig.banners()["active"] and not rig.banners()["queued"], f"{case}: opening history dismissed the banners and the queue")
         reasons = closed_reasons(rig.signals())
         rig.check(all(reasons.get(i) in (2, 1, 3) for i in ids), f"{case}: dismissed banners have no close reason")
@@ -749,7 +753,7 @@ def phase_persistence(rig):
         status = rig.cli("status", "--json")
         rig.check(status.returncode == 1 and '"pending":true' in status.stdout.replace(" ", ""), f"persistence: expected pending unsaved history, got {status.stdout!r}")
         rig.cli("history", "show")
-        panel = rig.settle(lambda: (lambda h: h if h and h.get("error") else None)(rig.history()), "the history panel shows the storage error")
+        panel = rig.settle(lambda: (lambda h: h if h and h.get("error") else None)(rig.history_ready()), "the committed history panel shows the storage error")
     finally:
         state.chmod(0o700)
     if panel and panel.get("retry_rect"):
@@ -760,6 +764,7 @@ def phase_persistence(rig):
         rig.settle(lambda: rig.cli("status", "--json").returncode == 0, "Retry saved the history")
         rig.check(not rig.cli("status", "--json").stdout.count('"pending":true'), "persistence: changes are still pending after Retry")
     rig.type("-k", "Escape")
+    rig.settle(lambda: (lambda p: p if p and not any(s["kind"] in ("Panel", "Catcher") for s in p["surfaces"]) else None)(rig.present()), "persistence panel and catchers closed")
 
 
 def phase_dnd(rig):

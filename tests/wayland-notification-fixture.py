@@ -163,6 +163,16 @@ PRESENT = {
 
 
 class PresentationBounds(unittest.TestCase):
+    def test_history_readiness_requires_current_panel_and_committed_catchers(self):
+        history = {"window": 7}
+        panel = {"id": 7, "kind": "Panel", "configured": True, "buffers": 1}
+        catcher = {"id": 8, "kind": "Catcher", "configured": True, "buffers": 1}
+        ready = {"surfaces": [panel, catcher, dict(catcher, id=9)]}
+        self.assertEqual(FIXTURE.history_input_ready(history, ready), history)
+        self.assertIsNone(FIXTURE.history_input_ready({"window": 6}, ready))
+        self.assertIsNone(FIXTURE.history_input_ready(history, {"surfaces": [dict(panel, buffers=0), catcher, dict(catcher, id=9)]}))
+        self.assertIsNone(FIXTURE.history_input_ready(history, {"surfaces": [panel, catcher]}))
+
     def test_kernel_mapping_sample_counts_only_notification_shm(self):
         maps = "1000-3000 rw-s 0 00:01 1 /memfd:smithay-client-toolkit (deleted)\n"
         maps += "3000-8000 rw-p 0 00:00 0 [heap]\n"
