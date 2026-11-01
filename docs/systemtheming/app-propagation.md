@@ -597,3 +597,13 @@ observed; source fingerprints match. Evidence:
 The test took 307 seconds including compilation; it was not a hung or restarted
 run. GNOME integration tests, native GTK/Qt propagation and whole-suite/CI remain
 separate acceptance requirements.
+
+Follow-up checkpoint at `fd19298`: all 21 tests passed (5 writer/caption fallback,
+14 GNOME integration, 2 native family component tests). The new native-launcher
+export floor and malformed mode-style fallback tests executed, as did the explicit
+unknown-capability refusal test. The latter leaves target files unchanged; the
+production capability gate was not relaxed. Evidence:
+`/var/tmp/decebal-theme-final-review-integration-retry1/`; source fingerprints match.
+The preceding attempt failed because the new test referenced another module's
+private fixture constant; it was repaired with a self-contained builtin fixture.
+Native GTK/Qt output and full-suite/CI acceptance remain separate.
