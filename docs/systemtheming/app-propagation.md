@@ -576,3 +576,13 @@ it is not a real WM semantic validator. Evidence:
 invalid-metric and missing/incomplete capability-fixture failures are retained
 in their original evidence directories. The shipped GNOME fixture equality and
 new package component integration tests still need execution.
+
+Qualified package integration checkpoint (2026-11-02): at `fc7ff44`,
+`cargo test --locked --offline -j1 --test theme_components -- --test-threads=1`
+compiled the actual checkout in its own target and executed both named tests
+successfully. The tests resolve Windows, NextKDE and GNOME launcher defaults in
+both modes, plus Windows/GNOME desired caption styles, classic fallback and
+right-side toolkit buttons. Evidence:
+`/var/tmp/decebal-theme-component-integration-qualified/result.json` and `check.log`.
+The source fingerprint stayed unchanged. This verifies package resolution, not
+native rendering, upstream replica fidelity or application repainting.
