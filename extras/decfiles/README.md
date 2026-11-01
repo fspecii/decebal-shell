@@ -775,3 +775,10 @@ The native gate driver now executes `openfix-test.py` as a prerequisite before
 starting any suite. Its three mocked registry-isolation tests pass; they prove
 the helper's setup/command contract only, not GIO's runtime registry discovery.
 The native no-handler precondition and native Open suites remain required.
+
+The callback-delay fixture candidate `9bd5cdd` now passes
+`cargo check --locked --offline -j1 --all-targets --features fixture-delay
+--manifest-path extras/decfiles/Cargo.toml`. Evidence:
+`/var/tmp/decebal-files-dispatch-fixture-check/result.json`; unchanged source,
+no resource interruption. This qualifies feature type-checking only; the new
+native dispatch fixture has still not run.
