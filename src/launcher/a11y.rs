@@ -699,7 +699,7 @@ fn text_op(f: &mut TextField, op: &Op) -> Result<(), ActionError> {
             let c = f.cursor();
             f.set_cursor(c);
         }
-        Op::SetText(t) => f.set(t),
+        Op::SetText(t) => f.set(&t.chars().filter(|c| !c.is_control()).collect::<String>()),
         Op::InsertText { offset, text } => {
             f.set_cursor((*offset).min(n));
             f.insert(text);
@@ -735,10 +735,13 @@ fn is_text_op(op: &Op) -> bool {
 fn edit(l: &mut Launcher, op: &Op) -> Result<(), ActionError> {
     l.a11y.area = Area::Search;
     if let Some(st) = l.styled.as_mut() {
+        st.cancel_pending();
+        st.m.keyboard = true;
         let before = st.m.field.text().to_string();
         text_op(&mut st.m.field, op)?;
         if st.m.field.text() != before {
             st.refilter();
+            st.relayout();
         }
         return Ok(());
     }
@@ -754,7 +757,7 @@ fn edit(l: &mut Launcher, op: &Op) -> Result<(), ActionError> {
 fn enter(l: &mut Launcher) -> Result<Response, ActionError> {
     if let Some(st) = l.styled.as_mut() {
         let (from, t) = match st.current() {
-            Some(t) if t.focusable() => (st.m.zone, t),
+            Some(t @ Tgt::App(_)) => (st.m.zone, t),
             _ => match st.m.results.first() {
                 Some(&i) if st.m.searching() => ("results", Tgt::App(i)),
                 _ => return Err(refused("there is no app to open")),
@@ -892,6 +895,9 @@ pub(super) fn act(l: &mut Launcher, t: &Target) -> Result<Response, ActionError>
     if key == "search" {
         if modal {
             return Err(modal_refusal());
+        }
+        if let Some(st) = l.styled.as_mut() {
+            st.cancel_pending();
         }
         return match &op {
             Op::Focus => {

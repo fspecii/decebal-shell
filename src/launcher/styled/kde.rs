@@ -183,6 +183,11 @@ fn disarm() {
     ARM.with(|a| a.set(None));
 }
 
+/// Moving accessibility focus to search cancels a pending leave action.
+pub fn cancel_pending() {
+    disarm();
+}
+
 /// The pending action, only while the focus is still on the control it was armed on.
 fn armed(m: &Model) -> Option<Sys> {
     ARM.with(|a| a.get()).filter(|a| a.zone == m.zone && a.sel == m.sel(a.zone)).map(|a| a.sys)

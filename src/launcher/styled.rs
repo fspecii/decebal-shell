@@ -972,6 +972,13 @@ pub struct Semantics {
 }
 
 impl Styled {
+    /// Search focus/editing is never a confirmation of a style-owned system action.
+    pub(super) fn cancel_pending(&mut self) {
+        if self.style == LauncherStyle::Kde {
+            kde::cancel_pending();
+        }
+    }
+
     /// The accessible description of a style-owned control; `None` for anything else, and for a control whose style
     /// does not describe it yet (the accessibility tests fail for every such control, so none goes unnoticed).
     pub fn semantics(&self, t: Target) -> Option<Semantics> {

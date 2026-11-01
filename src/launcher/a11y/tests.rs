@@ -856,3 +856,34 @@ fn no_style_owned_control_goes_undescribed_in_any_style() {
         }
     }
 }
+
+#[test]
+fn search_focus_or_activation_never_confirms_an_armed_system_action() {
+    for focus_first in [false, true] {
+        let mut r = kickoff();
+        r.act("footer/sys:restart", click()).unwrap();
+        assert_eq!(r.node("footer/sys:restart").name, "Restart?");
+        assert!(styled::kde_effects().1.is_empty());
+        if focus_first {
+            r.act("search", Op::Focus).unwrap();
+        }
+        assert!(matches!(r.act("search", Op::Action("activate")), Err(ActionError::Refused(_))));
+        assert!(styled::kde_effects().1.is_empty(), "search activation must never execute reboot");
+        // Returning to Restart asks again; only its explicit second press confirms.
+        r.act("footer/sys:restart", click()).unwrap();
+        assert!(styled::kde_effects().1.is_empty());
+        r.act("footer/sys:restart", click()).unwrap();
+        assert_eq!(styled::kde_effects().1, ["reboot"]);
+    }
+}
+
+#[test]
+fn setting_accessible_search_text_uses_single_line_keyboard_filtering() {
+    for style in [LauncherStyle::Default, LauncherStyle::Kde, LauncherStyle::Windows] {
+        let l = if style == LauncherStyle::Default { launchpad(3) } else { styled_launcher(style, 3) };
+        let mut r = Rig::new(l);
+        r.act("search", Op::SetText("a\nb\tc\r".into())).unwrap();
+        let text = r.l.styled.as_ref().map(|st| st.m.field.text()).unwrap_or_else(|| r.l.field.text());
+        assert_eq!(text, "abc");
+    }
+}

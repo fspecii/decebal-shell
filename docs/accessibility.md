@@ -203,3 +203,16 @@ it with GI Atspi and raw Gio calls:
     python3 -I tests/e2e/a11y_settings.py --bin target/debug/decsettings --evidence ~/.cache/decebal-a11y-evidence/run
 
 It never touches the live session bus, display, input, configuration or processes.
+
+### Review repair awaiting execution (2026-11-01)
+
+Search activation in the launcher is now restricted to application targets.
+Moving accessibility focus to search, editing it, or activating its default
+action cancels a pending Kickoff leave-action confirmation; it cannot confirm
+Restart/Shutdown left armed elsewhere. The explicit second press on the system
+button remains the confirmation route. SetText now filters control characters
+like keyboard input. New tests cover direct search activation, focus followed
+by activation, returning to the explicit two-press flow, and single-line text.
+These repairs have passed rustfmt/whitespace checks only; build/test and native
+AT-SPI/Orca acceptance are pending. Other review findings (modal disabled states,
+non-search empty announcements and launchability caching) remain open.
