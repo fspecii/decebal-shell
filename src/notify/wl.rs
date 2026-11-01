@@ -217,6 +217,8 @@ struct WlHost {
     qh: QueueHandle<State>,
     r: Render,
     policy: InsetPolicy,
+    /// Bar extents captured for the current stack layout; never read config during presentation.
+    layout_bar: BarFacts,
     /// `DECNOTIFY_OUTPUT`: always show on the output of that name.
     fixed_output: Option<String>,
     /// The output the compositor put the first surface on; later surfaces follow it until none is left.
@@ -287,7 +289,7 @@ impl WlHost {
         true
     }
 
-    fn bar_facts(&self) -> BarFacts {
+    fn read_bar_facts() -> BarFacts {
         let th = crate::theme::th();
         let insets = th.bar_insets();
         BarFacts { bar_bottom: crate::theme::bar_bottom(), pill: th.pill_bar().is_some(), right: insets.right, bottom: insets.bottom }
@@ -655,7 +657,7 @@ impl WlHost {
     fn layout_metrics(&self) -> Metrics {
         let s = self.scale.factor();
         let out = ((self.logical.0 as f32 * s).round() as i32, (self.logical.1 as f32 * s).round() as i32);
-        wayland_metrics(self.policy, s, out, self.bar_facts())
+        wayland_metrics(self.policy, s, out, self.layout_bar)
     }
 
     /// Parks a surface the compositor closed (its output went away). Catchers are simply dropped. Returns the banner
@@ -872,6 +874,7 @@ impl WlUi {
             fractional_manager,
             qh: qh.clone(),
             r: Render::new(1.0)?,
+            layout_bar: WlHost::read_bar_facts(),
             policy: InsetPolicy::from_env(std::env::var("DECNOTIFY_WAYLAND_INSETS").ok().as_deref()),
             fixed_output: std::env::var("DECNOTIFY_OUTPUT").ok().filter(|v| !v.is_empty()),
             target: None,
@@ -910,6 +913,7 @@ impl WlUi {
 
     /// Lays everything out again (theme, font scale, output size or scale change); ids, timers and hover are kept.
     fn reflow(&mut self, sh: &Shared) {
+        self.state.host.layout_bar = WlHost::read_bar_facts();
         self.stack.reflow(&mut self.state.host);
         self.refresh_history(sh);
     }

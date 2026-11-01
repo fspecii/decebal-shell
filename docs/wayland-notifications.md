@@ -168,3 +168,16 @@ This proves the presentation state-machine tests only. It does not qualify
 the whole crate, SCTK transport, compositor behavior, or native rendering.
 The preceding standalone attempt failed because its harness omitted the
 `serde_json` dependency; it is retained as failed harness evidence.
+
+### Source review repairs awaiting qualification (2026-11-01)
+
+Wayland presentation now uses bar extents captured for the stack's layout.
+Only initial setup and reflow read bar configuration; pointer/frame/release
+presentation turns no longer call the config-reading helper. Margins therefore
+stay tied to the current stack layout. A native config-open count remains needed.
+
+A newly released buffer now bypasses the busy sleep deadline, while the frame
+callback gate remains intact. A regression releases a buffer 1 ms into the
+250 ms back-off and requires immediate reuse. Failure-path log throttling and
+the distinction between logical buffer bytes and SlotPool allocation remain
+open review findings. These latest edits have only been parsed/formatted so far.

@@ -151,10 +151,10 @@ pub struct Pacer {
 }
 
 impl Pacer {
-    /// The next frame may go out: the last frame's callback arrived (or [`FRAME_STALL`] passed) and no busy retry is
-    /// scheduled for later.
+    /// The callback gate allows a frame. Busy retry deadlines control sleeping, not whether a newly
+    /// released buffer can be used immediately after a compositor event.
     pub fn can_commit(&self, now: Instant) -> bool {
-        self.pending_since.is_none_or(|t| now.saturating_duration_since(t) >= FRAME_STALL) && self.retry_at.is_none_or(|t| now >= t)
+        self.pending_since.is_none_or(|t| now.saturating_duration_since(t) >= FRAME_STALL)
     }
 
     /// Whether a commit now should ask for a frame callback (never more than [`MAX_CALLBACKS`] outstanding).
@@ -485,8 +485,8 @@ mod tests {
         p.submit((100, 50, 9));
         assert_eq!(step(&mut p, start, (100, 50), &mut flags), Plan::Deferred);
         assert_eq!(p.pacer.wake_in(start), Some(BUSY_RETRY));
-        assert_eq!(step(&mut p, start + Duration::from_millis(5), (100, 50), &mut flags), Plan::Deferred, "not before the retry time");
-        assert!(!p.pacer.can_commit(start + Duration::from_millis(5)));
+        assert_eq!(step(&mut p, start + Duration::from_millis(5), (100, 50), &mut flags), Plan::Deferred, "no released buffer is available yet");
+        assert!(p.pacer.can_commit(start + Duration::from_millis(5)), "a release must bypass the busy sleep deadline");
         let mut now = start;
         let mut wakes = Vec::new();
         for _ in 0..200 {
@@ -651,5 +651,23 @@ mod tests {
         assert_eq!(taken.len(), 2);
         assert_eq!(taken.iter().map(Entry::bytes).sum::<usize>(), 800);
         assert!(set.is_empty());
+    }
+    #[test]
+    fn release_wakes_a_frame_before_the_long_busy_retry_deadline() {
+        let mut p = P::default();
+        let mut flags = Vec::new();
+        let start = Instant::now();
+        for i in 0..3 {
+            p.submit((100, 50, i));
+            step(&mut p, start, (100, 50), &mut flags);
+            p.callback_done();
+        }
+        p.submit((100, 50, 9));
+        assert_eq!(step(&mut p, start, (100, 50), &mut flags), Plan::Deferred);
+        let backed_off = start + BUSY_BACKOFF_AFTER;
+        assert_eq!(step(&mut p, backed_off, (100, 50), &mut flags), Plan::Deferred);
+        assert_eq!(p.pacer.wake_in(backed_off), Some(BUSY_BACKOFF));
+        flags[1].set(true);
+        assert_eq!(step(&mut p, backed_off + Duration::from_millis(1), (100, 50), &mut flags), Plan::Reuse(1));
     }
 }
