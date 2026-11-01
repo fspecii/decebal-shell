@@ -541,3 +541,11 @@ before/after source fingerprints and no resource interruption. Evidence:
 `/var/tmp/decebal-theme-consistency-source-check/result.json`. New regression
 tests are type-checked but have not yet executed; native toolkit acceptance
 remains pending.
+
+Execution update: all five focused consistency regressions passed at `a557b91`
+with private HOME/XDG, dead buses, one test thread and identical source
+fingerprints. Evidence: `/var/tmp/decebal-theme-consistency-tests/result.json`
+and `check.log`. This executes every catalogue style in both modes, the legacy
+side override, matching/stale fallback handling, icon policy transitions and
+toolkit effective-config ownership. It does not replace native GTK/gsettings
+or visual-fidelity acceptance.
