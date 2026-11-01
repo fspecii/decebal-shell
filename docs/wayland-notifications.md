@@ -349,3 +349,22 @@ owned cleanup; no forced/rescue stops or resource abort.
 The checkpoint now records all 12 selected phase names across matched development
 runs. It still does not prove one complete optimized matrix, X11 regression,
 strict lint/full suite, rendered fidelity or physical hardware; the PR stays draft.
+
+## Complete development matrix (2026-11-02)
+
+All 12 phases passed together in one private two-output Sway run (which hotplugs a
+third output), using the unchanged pinned binary: `/var/tmp/dn-native-13/result.json`
+and `/var/tmp/decebal-notify-native-full-control-retry1/result.json`. Harness source
+`3554204`, production fingerprint unchanged. No failures, forced/rescue stops or
+resource abort. Idle shm mappings return to zero and fd count to 8. Both deadline
+maps match while banners are unhovered; actual input events and output-entry events
+are checked. The structured checkpoint records this as a complete dev matrix,
+not complete release acceptance. Optimized artifacts, X11 regressions, full-suite/
+strict lint, pixel fidelity and hardware remain open.
+The failed full attempt (`dn-native-12`) is retained: its deadline case included an
+incidental hover pause, and callback counts merged recycled surface/callback ids.
+Generation-aware parsing on that retained trace reports a maximum of 1 callback,
+not the spurious 3. New tests ensure an old generation's completion cannot free a
+new one's slots. Twenty-five fixture-helper tests pass and now run in CI. Partial
+debug-file writes retain the last valid snapshot; unrelated scenarios drain their
+own long-lived banners before starting.
