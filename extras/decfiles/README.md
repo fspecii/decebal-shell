@@ -722,3 +722,24 @@ observe a settling window and close timing is checked against the held probe.
 Dedicated native chooser-cancellation, tab-index-reuse, search-id and dispatched-
 launch race cases remain acceptance work; the source fixes and unit regressions
 do not substitute for those workflows.
+
+### Follow-up review repairs (2026-11-01, validation pending)
+
+Default activation now resolves executable MIME aliases and subclasses through
+GIO, including canonical Windows program types and executable Perl/Ruby/Python
+scripts. Ordinary documents with mount-provided execute bits still use their
+viewer. Filename-derived GIO types have a dedicated regression test.
+
+Dispatched launches are tracked separately from the current pre-dispatch
+request. Starting B while A is launching no longer loses A's result or lets A
+launch again before its callback finishes. A's completion does not consume B's
+pending request. Launch errors show their actual message rather than claiming
+that nothing was opened.
+
+The activation-key hold state belongs to the window, so replacing a file view
+does not reset it; window-level release or deactivation clears it. A search
+rerender restores the same selected path when it is still present, keeping an
+Open With chooser alive across cosmetic refreshes. Native held-key, chooser,
+and overlapping-dispatch tests remain required. These source changes have only
+passed rustfmt and whitespace checks at the time of this entry; they are not an
+accepted runtime release.

@@ -34,6 +34,7 @@ pub struct Controls {
     pub(crate) tracker: RefCell<Tracker>,
     menu: RefCell<Option<gtk::PopoverMenu>>,
     chooser: RefCell<Option<(u64, gtk::Dialog)>>,
+    enter_down: Rc<Cell<bool>>,
     /// The selected search result (taken from the result store), used only by explicit Open.
     pub(crate) search_selected: RefCell<Option<Entry>>,
 }
@@ -54,6 +55,7 @@ impl Controls {
             tracker: RefCell::new(Tracker::default()),
             menu: RefCell::new(None),
             chooser: RefCell::new(None),
+            enter_down: Rc::new(Cell::new(false)),
             search_selected: RefCell::new(None),
         }
     }
@@ -75,6 +77,22 @@ fn leaf(path: &Path) -> String {
 
 impl Ui {
     pub fn connect_open(self: &Rc<Self>) {
+        // The window sees release events even when navigation replaced the file view.
+        let release = gtk::EventControllerKey::new();
+        release.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let held = self.opener.enter_down.clone();
+        release.connect_key_released(move |_, key, _, _| {
+            if matches!(key, gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter | gtk::gdk::Key::space) {
+                held.set(false);
+            }
+        });
+        self.window.add_controller(release);
+        let held = self.opener.enter_down.clone();
+        self.window.connect_is_active_notify(move |window| {
+            if !window.is_active() {
+                held.set(false);
+            }
+        });
         let group = gio::SimpleActionGroup::new();
         group.add_action(&self.opener.open_action);
         group.add_action(&self.opener.open_with_action);
@@ -214,7 +232,7 @@ impl Ui {
             self.status.set_text("Select the file first.");
             return;
         }
-        if self.opener.tracker.borrow().pending().is_some_and(|pending| pending.stage == Stage::Launching && pending.path == entry.path) {
+        if self.opener.tracker.borrow().is_dispatching(&entry.path) {
             self.status.set_text("This file is already being opened.");
             return;
         }
@@ -281,7 +299,7 @@ impl Ui {
         self.model.borrow_mut().error = Some(message.clone());
         self.error.set_text(&message);
         self.error.set_visible(true);
-        self.status.set_text("Nothing was opened.");
+        self.status.set_text(&message);
         self.update_operation_controls();
         self.dump();
     }
@@ -477,21 +495,11 @@ impl Ui {
     pub fn attach_open_keys(self: &Rc<Self>, view: &impl IsA<gtk::Widget>, generation: u64) {
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let enter_down = Rc::new(Cell::new(false));
-        let pressed = enter_down.clone();
-        keys.connect_key_released(move |_, key, _, _| {
-            if matches!(key, gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter) {
-                enter_down.set(false);
-            }
-        });
-        let focus = gtk::EventControllerFocus::new();
-        let reset = pressed.clone();
-        focus.connect_leave(move |_| reset.set(false));
-        view.add_controller(focus);
+        let pressed = self.opener.enter_down.clone();
         let anchor = AsRef::<gtk::Widget>::as_ref(view).downgrade();
         let weak = Rc::downgrade(self);
         keys.connect_key_pressed(move |_, key, _, modifiers| {
-            if matches!(key, gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter) && pressed.replace(true) {
+            if matches!(key, gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter | gtk::gdk::Key::space) && pressed.replace(true) {
                 return glib::Propagation::Stop;
             }
             let menu = key == gtk::gdk::Key::Menu || (key == gtk::gdk::Key::F10 && modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK));

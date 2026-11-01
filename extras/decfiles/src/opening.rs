@@ -65,6 +65,9 @@ const PROGRAM_TYPES: &[&str] = &[
     "application/x-sharedlib",
     "application/vnd.appimage",
     "application/x-ms-dos-executable",
+    "application/x-msdownload",
+    "application/x-dosexec",
+    "application/x-bat",
     "application/vnd.microsoft.portable-executable",
     "application/x-msdos-program",
     "application/x-java-archive",
@@ -91,7 +94,12 @@ pub fn is_desktop_entry(path: &Path, content_type: &str) -> bool {
 /// Program content, or an executable script. Mounts may report execute bits on
 /// ordinary data files, so permission bits alone must not block their viewers.
 pub fn is_executable(probe: &Probe) -> bool {
-    PROGRAM_TYPES.contains(&probe.content_type.as_str()) || (probe.mode & 0o111 != 0 && SCRIPT_TYPES.contains(&probe.content_type.as_str()))
+    let is_a = |kind: &str| gio::content_type_is_a(&probe.content_type, kind);
+    let text = is_a("text/plain");
+    let executable = is_a("application/x-executable");
+    (executable && !text)
+        || PROGRAM_TYPES.iter().filter(|kind| **kind != "application/x-executable").any(|kind| is_a(kind))
+        || (probe.mode & 0o111 != 0 && ((executable && text) || SCRIPT_TYPES.iter().any(|kind| is_a(kind))))
 }
 
 /// Default activation never hands programs or launchers to anything. Open With is the user's
@@ -182,6 +190,7 @@ pub struct Tracker {
     last_id: u64,
     pending: Option<Pending>,
     last: Option<Record>,
+    dispatched: Vec<Pending>,
 }
 
 impl Tracker {
@@ -209,18 +218,25 @@ impl Tracker {
         match self.pending.as_mut().filter(|pending| pending.id == id) {
             Some(pending) => {
                 pending.stage = stage;
+                if stage == Stage::Launching && !self.dispatched.iter().any(|request| request.id == id) {
+                    self.dispatched.push(pending.clone());
+                }
                 true
             }
             None => false,
         }
     }
 
-    /// Complete the current request. False (and nothing recorded) when `id` is stale.
+    pub fn is_dispatching(&self, path: &Path) -> bool {
+        self.dispatched.iter().any(|request| request.path == path)
+    }
+
+    /// Complete a current request or a dispatched launch; only stale pre-dispatch callbacks are ignored.
+    /// An older launch can report its outcome without consuming the newer pending request.
     pub fn finish(&mut self, id: u64, status: &'static str, message: String) -> bool {
-        if self.current(id).is_none() {
-            return false;
-        }
-        let pending = self.pending.take().unwrap();
+        let dispatched = self.dispatched.iter().position(|request| request.id == id).map(|index| self.dispatched.remove(index));
+        let pending = if self.current(id).is_some() { self.pending.take() } else { dispatched };
+        let Some(pending) = pending else { return false };
         self.last = Some(Record { id, path: pending.path, purpose: pending.purpose, status, message });
         true
     }
@@ -265,7 +281,8 @@ impl Tracker {
             value["message"] = record.message.clone().into();
             value
         });
-        serde_json::json!({"pending":pending, "last":last, "requests":self.last_id})
+        let dispatched: Vec<_> = self.dispatched.iter().map(|request| describe(request.id, &request.path, request.purpose)).collect();
+        serde_json::json!({"pending":pending, "last":last, "dispatched":dispatched, "requests":self.last_id})
     }
 }
 
@@ -382,16 +399,33 @@ mod tests {
     }
 
     #[test]
-    fn superseding_a_dispatched_request_does_not_cancel_its_application_or_replace_a_newer_result() {
+    fn superseded_launch_reports_outcome_without_consuming_newer_request() {
         let mut tracker = Tracker::default();
         let (first, _) = tracker.begin("/base/a".into(), Purpose::Default, scope());
         tracker.advance(first.id, Stage::Launching);
         let (second, token) = tracker.begin("/base/b".into(), Purpose::Default, scope());
         assert!(token.is_none());
         assert!(!first.cancel.is_cancelled());
+        assert!(tracker.is_dispatching(Path::new("/base/a")));
+        assert!(tracker.finish(first.id, "failed", "A failed to start".into()));
+        assert_eq!(tracker.last().unwrap().message, "A failed to start");
+        assert!(tracker.current(second.id).is_some());
+        assert!(!tracker.is_dispatching(Path::new("/base/a")));
         assert!(tracker.finish(second.id, "launched", "Opened B".into()));
-        assert!(!tracker.finish(first.id, "launched", "Opened A".into()));
+        assert!(!tracker.finish(first.id, "launched", "Duplicate completion".into()));
         assert_eq!(tracker.last().unwrap().message, "Opened B");
+    }
+
+    #[test]
+    fn canonical_filename_guesses_refuse_programs_and_only_executable_scripts() {
+        for name in ["a.exe", "a.dll", "a.pl", "a.rb", "a.py"] {
+            let (kind, _) = gio::content_type_guess(Some(Path::new(name)), None);
+            let program = name.ends_with(".exe") || name.ends_with(".dll");
+            for mode in [0o644, 0o755] {
+                let probe = probe_of(Kind::Regular, &kind, mode);
+                assert_eq!(judge(Path::new(name), &probe, Purpose::Default), if program || mode == 0o755 { Err(Refusal::Executable) } else { Ok(()) }, "{name}: {kind}, mode {mode:o}");
+            }
+        }
     }
 
     #[test]

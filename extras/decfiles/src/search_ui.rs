@@ -146,11 +146,18 @@ impl Ui {
     /// The results list: Name, Folder and Type, in discovery order.
     pub fn search_view(self: &Rc<Self>, generation: u64) -> Option<gtk::Widget> {
         let store = self.search.borrow().as_ref()?.store.clone();
+        let selected_path = self.opener.search_selected.borrow().as_ref().map(|entry| entry.path.clone());
+        let selected = selected_path
+            .as_ref()
+            .and_then(|path| (0..store.n_items()).find(|&index| store.item(index).and_downcast::<glib::BoxedAnyObject>().is_some_and(|object| object.borrow::<Entry>().path == *path)));
         let selection = gtk::SingleSelection::new(Some(store));
         selection.set_autoselect(false);
         selection.set_can_unselect(true);
-        // A rebuilt view starts without a selection, so a pending explicit Open is dropped.
-        self.search_selection_changed(None);
+        if let Some(index) = selected {
+            selection.set_selected(index);
+        } else {
+            self.search_selection_changed(None);
+        }
         let weak = Rc::downgrade(self);
         selection.connect_selected_notify(move |selection| {
             if let Some(ui) = weak.upgrade().filter(|ui| ui.render_generation.get() == generation) {
