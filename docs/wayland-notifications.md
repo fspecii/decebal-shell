@@ -218,3 +218,17 @@ cannot show that SCTK leaves a pool untouched (the runtime length check is what
 guards that) or measure RSS. Pending: compile, the focused `present.rs` run, and
 a native resize/scale churn run reading `pool_bytes` against `total_bytes` and
 the process's mapped shm.
+
+## Qualified allocation-repair checkpoint (2026-11-02)
+
+At `8a1ee1b`, a fresh checkout-owned Cargo target compiled the complete candidate
+with `cargo check --locked --offline -j1 --all-targets` (default X11 + Wayland
+features). Source fingerprints before and after match. Evidence:
+`/var/tmp/decebal-notify-pool-qualified-check/result.json` and `check.log`.
+The exact `present.rs` source ran 19 unit tests successfully, including page-rounded
+pool budgets, active/retired allocation churn and overflow-safe refusal of impossible
+dimensions; see `/var/tmp/decebal-notify-present-unit-pool-bound/`.
+The 12 Python fixture-helper tests also pass. These are compile/model/helper proofs;
+no native compositor was run. Wayland-only and X11-only checks, native resize/scale
+churn, mapped-memory/RSS observations and per-buffer creation cost remain pending.
+The 4 KiB accounting caveat for larger-page kernels above still applies.
