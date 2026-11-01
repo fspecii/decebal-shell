@@ -18,6 +18,8 @@ jobs:
         run: python3 tests/desktop-job.py
       - name: Notification fixture parser and isolation regressions
         run: python3 tests/wayland-notification-fixture.py
+      - name: Owned X11 notification fixture regressions
+        run: python3 tests/e2e/notify-private-test.py
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
