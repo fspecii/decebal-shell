@@ -4,12 +4,18 @@ on:
     branches: [master]
   pull_request:
 
+# New PR revisions supersede old checks; master publication runs are preserved.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   check:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - name: Install system libraries
@@ -30,6 +36,7 @@ jobs:
 
   deb:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     needs: check
     steps:
       - uses: actions/checkout@v7
