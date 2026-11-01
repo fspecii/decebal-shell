@@ -43,13 +43,13 @@ const SLOT_ALIGN: usize = 64;
 /// Length of the shm pool created for one buffer of `size` device pixels (4 bytes a pixel): exactly the slot the
 /// library carves for it, so the pool never has to grow and has no free space left over.
 pub fn pool_len(size: (u32, u32)) -> usize {
-    (size.0 as usize * size.1 as usize * 4).max(1).div_ceil(SLOT_ALIGN) * SLOT_ALIGN
+    (size.0 as usize).saturating_mul(size.1 as usize).saturating_mul(4).max(1).div_ceil(SLOT_ALIGN).saturating_mul(SLOT_ALIGN)
 }
 
 /// Shm memory one buffer of `size` occupies: its own pool, rounded up to [`PAGE_BYTES`]. This, not the pixel count,
 /// is what the byte budgets count.
 pub fn alloc_bytes(size: (u32, u32)) -> usize {
-    pool_len(size).div_ceil(PAGE_BYTES) * PAGE_BYTES
+    pool_len(size).div_ceil(PAGE_BYTES).saturating_mul(PAGE_BYTES)
 }
 
 /// Whether the compositor has let go of a buffer (it may be drawn into and attached again, or destroyed).
@@ -726,6 +726,14 @@ mod tests {
         assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER), None);
         pacer.busy(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1));
         assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1)), Some(BUSY_RETRY));
+    }
+
+    #[test]
+    fn impossible_frame_dimensions_are_refused_without_wrapping_the_budget() {
+        let mut buffers = BufferSet::<Fake>::default();
+        assert_eq!(buffers.pick((u32::MAX, u32::MAX), MAX_TOTAL_BYTES), Pick::Refused(Refusal::Oversize));
+        assert!(alloc_bytes((u32::MAX, u32::MAX)) > MAX_BUFFER_BYTES);
+        assert!(buffers.is_empty());
     }
 
     #[test]
