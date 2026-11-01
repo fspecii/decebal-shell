@@ -91,3 +91,14 @@ normal Python wait/tool boundaries and at the top-level return. Cleanup evidence
 also retains the signal, and an interrupted run cannot return success even if a
 callback caught the original exception. Two mocked callback regressions join the
 26 existing helper tests; all 28 pass. A fresh native run is still required.
+
+
+The subsequent fresh run with the cancellation fix passed:
+`/var/tmp/decebal-notify-x11-theme-qualified-retry1/result.json` (17.24 seconds,
+fixture `4002a4f`, development daemon `b729545`). Its cleanup record has no forced
+kills, failures or interruption. It verifies persistent toast/history repainting,
+independent palette/dynamic/light/missing-theme selections, DND and storage
+preservation, icon A→B refresh including negative-cache recovery, image hints and
+banner identity/deadline preservation. The first interrupted attempt stays failed.
+This does not qualify the separate X11 storage/history workflow, an optimized
+binary or a physical desktop.
