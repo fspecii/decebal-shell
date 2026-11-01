@@ -21,7 +21,7 @@ jobs:
           make -o all install DESTDIR="$PWD/stage" PREFIX=/usr
           tar -C stage -czf "dist/decebal-${GITHUB_REF_NAME}-x86_64-linux.tar.gz" .
           (cd dist && sha256sum * > SHA256SUMS)
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           generate_release_notes: true
