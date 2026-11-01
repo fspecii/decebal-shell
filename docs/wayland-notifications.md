@@ -301,3 +301,17 @@ pointer and lost its only keyboard between short wtype clients; no pointer objec
 was bound. The corrected fixture keeps an owned virtual pointer and keyboard,
 asserts seat capabilities and input preflight, and verifies pointer binding before
 actions. Failed evidence is retained, not counted as product acceptance.
+
+History acceptance: `/var/tmp/dn-native-07/result.json` and
+`/var/tmp/decebal-notify-native-history-control-retry2/result.json` passed all five
+contract/bus/queue/actions/history phases against the same pinned binary. Escape,
+same-output outside click and other-output outside click destroy the panel and
+catchers, restore typing to the original native sink without refocusing, dismiss
+active/queued banners with close reasons and never replay saved actions. Cleanup
+is clean. Fresh panel/input-buffer and keyboard enter/leave barriers are required;
+old debug files or an enter from a previous surface are not readiness proof.
+Earlier history attempts (`dn-native-05`, `dn-native-06`) are retained: the first
+raced input readiness; the second mixed reused protocol IDs across generations.
+Contract checks now examine each panel's fresh trace interval. Native remaining
+phases, optimized artifacts, X11 regressions and rendered/hardware fidelity remain
+open; five passing dev-binary phases do not qualify the complete transport.
