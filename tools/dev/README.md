@@ -116,3 +116,25 @@ invalid input or failed probe. This is process identity evidence, not proof of
 visual correctness, event-loop responsiveness, or a complete component inventory.
 
 Run the isolated process-identity tests with `python3 -I tests/shell-health.py`.
+
+## Smaller UKUI native qualification runs
+
+The UKUI launcher gate accepts `--shard-count 12 --shard-index 0` (indices 0–11),
+which divides the original 72 screen/scale/mode/edge cases into six cases per
+run. Each shard must use a new evidence directory and the same sealed binary,
+theme package, helper, harness and fixture definitions. Run each separately
+through the shared resource guard. Default invocation still runs all 72 cases.
+No earlier interrupted result is reused or relabelled as passing.
+
+Aggregate all completed results with:
+
+```sh
+python3 tests/e2e/openkylin-launcher-shards.py /evidence/shard*/native-launcher.json
+```
+
+The aggregator refuses incomplete, repeated, interrupted, unclean, overlapping,
+quick-only or mismatched-input evidence and requires a successful real pointer
+launch. Raw desktop-entry hashes are retained, and a second normalized digest
+replaces only the random private-directory prefix for cross-run comparison.
+All other input hashes must match. Passing helper tests proves this coverage
+accounting, not the native product behavior; the shards still need native runs.
