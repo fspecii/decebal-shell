@@ -314,13 +314,23 @@ mod tests {
 
     #[test]
     fn the_pixmap_cache_stays_within_its_budget() {
-        let mut c = IconCache::default();
-        for i in 0..260 {
-            assert_eq!(c.get(&format!("no-such-icon-{i}"), 128).width(), 128);
+        // The cache is emptied whenever the theme or the icon settings change (their generation counters are process-wide),
+        // and other tests change those at any moment. Fill it again when that happened while this one was doing so.
+        let generation = || (live::generation(), crate::theme::generation());
+        for _ in 0..50 {
+            let before = generation();
+            let mut c = IconCache::default();
+            for i in 0..260 {
+                assert_eq!(c.get(&format!("no-such-icon-{i}"), 128).width(), 128);
+            }
+            let (n, bytes) = c.usage();
+            assert!(n <= CACHE_ENTRIES && bytes <= CACHE_BYTES, "{n} pixmaps, {bytes} bytes");
+            if generation() == before {
+                assert!(n >= 60, "but it does keep a useful number: {n}");
+                return;
+            }
         }
-        let (n, bytes) = c.usage();
-        assert!(n <= CACHE_ENTRIES && bytes <= CACHE_BYTES, "{n} pixmaps, {bytes} bytes");
-        assert!(n >= 60, "but it does keep a useful number: {n}");
+        panic!("the theme kept changing under the test");
     }
 
     #[test]
