@@ -353,7 +353,7 @@ fn a_mode_specific_port_is_refused_when_the_target_cannot_prove_its_styles() {
     let src = Source { shell_json: paths.shell_json(), themes_dir: themes() };
     fs::write(&paths.rdwm_config, "[general]\n").unwrap();
     for mode in [Mode::Dark, Mode::Light] {
-        let err = apply::plan(&src, &paths, "gnome-adwaita", &Selection { mode, ..Selection::default() }).err().expect("an unprovable style must not plan");
+        let err = apply::plan(&src, &paths, "gnome-adwaita", &Selection { mode, ..Selection::default() }).expect_err("an unprovable style must not plan");
         assert!(err.contains("could not be checked") && err.contains("Nothing was changed"), "{mode:?}: {err}");
     }
     assert_eq!(fs::read_to_string(&paths.rdwm_config).unwrap(), "[general]\n");
