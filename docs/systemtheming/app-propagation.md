@@ -586,3 +586,14 @@ right-side toolkit buttons. Evidence:
 `/var/tmp/decebal-theme-component-integration-qualified/result.json` and `check.log`.
 The source fingerprint stayed unchanged. This verifies package resolution, not
 native rendering, upstream replica fidelity or application repainting.
+
+Review-repair checkpoint (2026-11-02), source `ce2769e`: 63 focused library tests
+passed with zero failures in the checkout-owned target, private HOME/XDG and dead
+buses. These cover icon policy, app-icon field readback, CLI custom/automatic
+ownership, theme application, all listed themes across modes, ordered persistence,
+external-edit races and rollback. Required newly named tests were positively
+observed; source fingerprints match. Evidence:
+`/var/tmp/decebal-theme-review-repairs-tests/result.json` and `check.log`.
+The test took 307 seconds including compilation; it was not a hung or restarted
+run. GNOME integration tests, native GTK/Qt propagation and whole-suite/CI remain
+separate acceptance requirements.
