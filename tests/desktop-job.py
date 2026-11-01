@@ -52,6 +52,34 @@ class DesktopJobTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def test_cargo_targets_cannot_reuse_another_checkout_product(self):
+        module = self.module()
+        shared = self.root / 'shared-target'
+        a, b = self.root / 'checkout-a', self.root / 'checkout-b'
+        first = {'CARGO_TARGET_DIR': str(shared)}
+        second = dict(first)
+        module.source_target(['cargo', 'test'], first, self.root, a)
+        module.source_target(['cargo', 'test'], second, self.root, b)
+        self.assertNotEqual(first['CARGO_TARGET_DIR'], second['CARGO_TARGET_DIR'])
+        self.assertTrue(Path(first['CARGO_TARGET_DIR']).is_relative_to(shared))
+        again = {'CARGO_TARGET_DIR': str(shared)}
+        module.source_target(['cargo', 'test'], again, self.root, a)
+        self.assertEqual(first, again)
+
+    def test_manifest_and_cli_target_override_are_scoped_together(self):
+        module = self.module()
+        a, b = self.root / 'a', self.root / 'b'
+        for target_args in (['--target-dir', 'cache'], ['--target-dir=cache']):
+            env = {'CARGO_TARGET_DIR': 'ignored'}
+            result = module.source_target(
+                ['cargo', 'test', '--manifest-path', str(b / 'Cargo.toml'), *target_args,
+                 '--', '--target-dir=literal-test-argument'], env, self.root, a)
+            expected = {'CARGO_TARGET_DIR': str(a / 'cache')}
+            module.source_target(['cargo', 'test'], expected, self.root, b)
+            self.assertEqual(env['CARGO_TARGET_DIR'], expected['CARGO_TARGET_DIR'])
+            self.assertIn(env['CARGO_TARGET_DIR'], ' '.join(result[:-2]))
+            self.assertEqual(result[-1], '--target-dir=literal-test-argument')
+
     def test_pressure_uses_measured_intervals_and_handles_counter_reset(self):
         module = self.module()
         with patch.object(module, 'io_full_total', side_effect=[100, 200100, 10, 300010]), patch.object(module.time, 'monotonic', side_effect=[0, .5, 2, 3, 5]):

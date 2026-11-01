@@ -51,6 +51,48 @@ def cargo_args(command):
             raise Refused('desktop jobs permit only cargo -j1; omit --jobs or use 1')
 
 
+def source_target(command, env, cache, cwd=None):
+    """Scope direct Cargo jobs even when a caller supplies a shared target base."""
+    cwd = Path.cwd() if cwd is None else Path(cwd)
+    source = cwd.resolve()
+    command = list(command)
+    if Path(command[0]).name != 'cargo':
+        key = hashlib.sha256(os.fsencode(source)).hexdigest()[:16]
+        env.setdefault('CARGO_TARGET_DIR', str(cache / 'decebal-targets' / key))
+        return command
+    args_end = command.index('--') if '--' in command else len(command)
+    base = Path(env.get('CARGO_TARGET_DIR', str(cache / 'decebal-targets')))
+    targets = []
+    i = 1
+    while i < args_end:
+        arg = command[i]
+        if arg in ('--manifest-path', '--target-dir'):
+            if i + 1 >= args_end:
+                raise Refused(f'{arg} requires a value')
+            value = command[i + 1]
+            if arg == '--manifest-path':
+                source = (cwd / value).resolve().parent
+            else:
+                base = Path(value)
+                targets.append((i + 1, False))
+            i += 2
+            continue
+        if arg.startswith('--manifest-path='):
+            source = (cwd / arg.split('=', 1)[1]).resolve().parent
+        elif arg.startswith('--target-dir='):
+            base = Path(arg.split('=', 1)[1])
+            targets.append((i, True))
+        i += 1
+    # A manifest in another checkout must never inherit this checkout's root
+    # product fingerprints. Dependency-only seeds may be placed in this leaf.
+    key = hashlib.sha256(os.fsencode(source)).hexdigest()[:16]
+    target = str((cwd / base).resolve() / 'desktop-sources' / key)
+    env['CARGO_TARGET_DIR'] = target
+    for index, joined in targets:
+        command[index] = '--target-dir=' + target if joined else target
+    return command
+
+
 def acquire(slots, deadline):
     """Take both old slots without holding one while waiting for the other."""
     while True:
@@ -141,8 +183,7 @@ def run(command, slots, timeout, max_io_stall=10, quiet_seconds=0):
     env.setdefault('CARGO_PROFILE_DEV_DEBUG', '0')
     env.setdefault('CARGO_PROFILE_TEST_DEBUG', '0')
     cache = Path(env.get('XDG_CACHE_HOME', str(Path.home() / '.cache')))
-    key = hashlib.sha256(os.fsencode(Path.cwd())).hexdigest()[:12]
-    env.setdefault('CARGO_TARGET_DIR', str(cache / 'decebal-targets' / key))
+    command = source_target(command, env, cache)
     pressure = Pressure(max_io_stall)
     cancel = []
     old = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}

@@ -23,7 +23,7 @@ security boundary: direct commands that bypass the runner can still consume reso
 
 Each command gets nice 19, idle I/O priority, `CARGO_BUILD_JOBS=1` and `RUST_TEST_THREADS=1`. Explicit Cargo job
 counts above one are refused. Developer/test debug info defaults to zero unless the caller explicitly selected
-it. An existing `CARGO_TARGET_DIR` is preserved; otherwise a persistent cache outside the checkout is selected
+it. Direct Cargo jobs treat an existing `CARGO_TARGET_DIR` or `--target-dir` as a cache base and append `desktop-sources/<source-path-hash>`. The resolved manifest directory (or current directory) owns that leaf, preventing cross-worktree root-product reuse. Otherwise a persistent cache outside the checkout is selected
 from its absolute path. Do not launch parallel builds from inside one wrapper or override the thread limits in
 the test executable. Build evidence must record any explicit profile changes.
 
@@ -138,3 +138,8 @@ launch. Raw desktop-entry hashes are retained, and a second normalized digest
 replaces only the random private-directory prefix for cross-run comparison.
 All other input hashes must match. Passing helper tests proves this coverage
 accounting, not the native product behavior; the shards still need native runs.
+
+Direct Cargo target isolation does not inspect Cargo launched inside a shell or Python controller.
+Such controllers must use a checkout-owned target themselves and record positive test counts/names;
+a successful exit with zero matching tests is not regression evidence. Never seed a target with
+another checkout's root-crate fingerprints or incremental state.
