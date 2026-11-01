@@ -743,3 +743,10 @@ Open With chooser alive across cosmetic refreshes. Native held-key, chooser,
 and overlapping-dispatch tests remain required. These source changes have only
 passed rustfmt and whitespace checks at the time of this entry; they are not an
 accepted runtime release.
+
+Qualification update: repaired source `5f75f03` passed
+`cargo check --locked --offline -j1 --all-targets --manifest-path extras/decfiles/Cargo.toml`
+with identical before/after source fingerprints and no resource interruption.
+Evidence: `/var/tmp/decebal-files-open-source-gate4/result.json`.
+This includes type-checking the new regression tests; it does not mean they
+have executed, nor does it replace native GTK input/race acceptance.
