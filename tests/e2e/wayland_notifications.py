@@ -719,7 +719,7 @@ def phase_history(rig):
         reasons = closed_reasons(rig.signals())
         rig.check(all(reasons.get(i) in (2, 1, 3) for i in ids), f"{case}: dismissed banners have no close reason")
         rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.enter", rig.trace()[trace_at:]), f"{case}: the new panel received the keyboard")
-        rig.evidence[f"history_{case}"] = check_history_contract(rig.trace(), 2, rig.failures)
+        rig.evidence[f"history_{case}"] = check_history_contract(rig.trace()[trace_at:], 2, rig.failures)
         if closer == "key":
             for keys in (["-k", "Tab"], ["-M", "shift", "-k", "Tab", "-m", "shift"], ["-k", "Tab"], ["-k", "Return"]):
                 rig.type(*keys)
