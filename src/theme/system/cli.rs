@@ -240,3 +240,32 @@ fn xsettings(args: &[String]) -> Result<(), String> {
         Err("this build has no X11 support".into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_icon_choices_replace_theme_ownership_and_reach_the_effective_config() {
+        use crate::desktop_assets::{policy, Provides};
+        let dir = std::env::temp_dir().join(format!("decebal-cli-icon-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = Source { shell_json: dir.join("decebal.json"), themes_dir: dir.join("themes") };
+        std::fs::write(
+            &src.shell_json,
+            r#"{"system":{"enabled":false},"icons":{"theme":"Adwaita"},"asset_packs":{"icons":{"mode":"follow","theme":"gnome-adwaita","applied":"Adwaita"}},"future":42}"#,
+        )
+        .unwrap();
+        for (name, expected) in [("Papirus", Some("Papirus")), ("none", None)] {
+            system(&["set".into(), "icon-theme".into(), name.into()], &src, false).unwrap();
+            let doc: serde_json::Value = serde_json::from_slice(&std::fs::read(&src.shell_json).unwrap()).unwrap();
+            assert_eq!(policy::current(&doc, Provides::Icons).as_deref(), expected);
+            assert_eq!(policy::owner(&doc, Provides::Icons), policy::Owner::User);
+            assert_eq!(super::super::effective_config(&src.shell_json).icon_theme.as_deref(), expected);
+            assert!(doc["system"].get("iconTheme").is_none());
+            assert_eq!(doc["future"], 42);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
