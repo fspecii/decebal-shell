@@ -9,8 +9,6 @@ min_shell_version = "0.3.0"
 tags = ["windows", "fluent"]
 
 [metrics]
-# Legacy flat-token/capture fallback; actual modern styles are selected below.
-titlebar_style = "classic"
 radius = 8
 dock_roundness = 0.22
 dock_alpha = 0.85
@@ -26,7 +24,8 @@ preset = "segoe"
 style = "windows"
 
 [decoration]
-style = "windows"
+# Mode-specific keys take precedence; the base is the legacy/fallback representation.
+style = "classic"
 style_light = "windows-light"
 style_dark = "windows"
 fallback_style = "classic"
