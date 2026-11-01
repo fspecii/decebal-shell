@@ -242,3 +242,14 @@ appmenu integration module missing feature requirements; these are now gated on
 `x11`, retaining their X11 coverage. X11-only compilation emits two existing
 dead-code warnings (`Announcer::invalidate` and `Tracker::replace`); this is not
 a strict-clippy pass. Native transport and memory acceptance remain pending.
+
+At `f9627c1`, a new daemon-wide 64-pool limit covers live and compositor-retained
+buffers, bounding per-buffer memfds independently of the byte budget. Existing
+released buffers remain reusable when the cap is reached. Constructors refuse zero
+or over-budget dimensions themselves. Reaping a released buffer now marks debug
+state dirty, so native fixtures do not wait on stale retention counters.
+The updated exact presentation module passed 20 tests; fresh default-feature
+all-target compilation also passed with stable source fingerprints. Evidence:
+`/var/tmp/decebal-notify-present-unit-pool-count/` and
+`/var/tmp/decebal-notify-pool-count-qualified-check/`. Native /proc mapping/fd
+measurements are still required; internal counters alone do not prove RSS.
