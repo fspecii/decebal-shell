@@ -171,6 +171,11 @@ impl Pacer {
         if requested {
             self.outstanding += 1;
         }
+        self.clear_busy();
+    }
+
+    /// A buffer was successfully used without frame-callback pacing (transparent catchers).
+    pub fn clear_busy(&mut self) {
         self.retry_at = None;
         self.busy_since = None;
     }
@@ -669,5 +674,17 @@ mod tests {
         assert_eq!(p.pacer.wake_in(backed_off), Some(BUSY_BACKOFF));
         flags[1].set(true);
         assert_eq!(step(&mut p, backed_off + Duration::from_millis(1), (100, 50), &mut flags), Plan::Reuse(1));
+    }
+    #[test]
+    fn a_successful_unpaced_commit_resets_busy_backoff() {
+        let start = Instant::now();
+        let mut pacer = Pacer::default();
+        pacer.busy(start);
+        pacer.busy(start + BUSY_BACKOFF_AFTER);
+        assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER), Some(BUSY_BACKOFF));
+        pacer.clear_busy();
+        assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER), None);
+        pacer.busy(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1));
+        assert_eq!(pacer.wake_in(start + BUSY_BACKOFF_AFTER + Duration::from_millis(1)), Some(BUSY_RETRY));
     }
 }

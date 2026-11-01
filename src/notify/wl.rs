@@ -556,9 +556,12 @@ impl WlHost {
                 }
                 Err(e) => {
                     // The frame stays pending; the retry is scheduled, not spun on.
-                    crate::log_warn!("decnotify: cannot allocate a {w}x{h} shm buffer: {e}");
+                    if !s.refusal_logged {
+                        crate::log_warn!("decnotify: cannot allocate a {w}x{h} shm buffer: {e}");
+                        s.refusal_logged = true;
+                        s.pres.stats.refused += 1;
+                    }
                     s.pres.pacer.busy(now);
-                    s.pres.stats.refused += 1;
                     s.deferred = true;
                     self.debug_dirty = true;
                     return;
@@ -611,7 +614,11 @@ impl WlHost {
             }
             let idx = match s.pres.buffers.pick(size, budget_left) {
                 Pick::Reuse(k) => {
-                    let Some(canvas) = s.pres.buffers.get(k).canvas(&mut self.pool) else { return };
+                    let Some(canvas) = s.pres.buffers.get(k).canvas(&mut self.pool) else {
+                        s.pres.pacer.busy(now);
+                        s.deferred = true;
+                        return;
+                    };
                     canvas.fill(0);
                     k
                 }
@@ -621,7 +628,11 @@ impl WlHost {
                         s.pres.insert(buffer, size)
                     }
                     Err(e) => {
-                        crate::log_warn!("decnotify: cannot allocate a {bw}x{bh} shm buffer: {e}");
+                        if !s.refusal_logged {
+                            crate::log_warn!("decnotify: cannot allocate a {bw}x{bh} shm buffer: {e}");
+                            s.refusal_logged = true;
+                            s.pres.stats.refused += 1;
+                        }
                         s.pres.pacer.busy(now);
                         s.deferred = true;
                         return;
@@ -633,11 +644,19 @@ impl WlHost {
                     return;
                 }
                 Pick::Refused(_) => {
-                    crate::log_warn!("decnotify: a click catcher buffer was refused by the memory budget");
+                    if !s.refusal_logged {
+                        crate::log_warn!("decnotify: a click catcher buffer was refused by the memory budget");
+                        s.refusal_logged = true;
+                        s.pres.stats.refused += 1;
+                    }
+                    s.pres.pacer.busy(now);
+                    s.deferred = true;
                     return;
                 }
             };
             if s.pres.buffers.get(idx).attach_to(layer.wl_surface()).is_err() {
+                s.pres.pacer.busy(now);
+                s.deferred = true;
                 return;
             }
             s.attached = Some(size);
@@ -650,6 +669,8 @@ impl WlHost {
         set_region(&self.compositor, layer.wl_surface(), &[(0, 0, lw as i32, lh as i32)]);
         layer.commit();
         s.covered = Some(s.area);
+        s.pres.pacer.clear_busy();
+        s.refusal_logged = false;
         self.debug_dirty = true;
     }
 

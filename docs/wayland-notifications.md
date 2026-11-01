@@ -187,3 +187,16 @@ passed, including immediate reuse after release during long back-off. Module
 SHA-256 `dbe5adaf9ab544293a1b1f1fc6f53f4c7acb2ef89cc6aa976e75e369302c3e22`;
 evidence `/var/tmp/decebal-notify-present-unit-repair/result.json`. The wl.rs
 layout-cache change is not compiled or runtime-qualified by this module run.
+
+Failure-path follow-up: allocation/catcher failures now share the per-surface
+warning latch (cleared by a successful commit), and refusals count once per
+failure episode rather than every allocation retry. Catcher failure paths
+schedule a retry; successful unpaced catcher commits reset busy back-off
+without pretending they requested a frame callback. A pure pacing regression
+covers resetting from 250 ms back to the initial retry. Native allocation-fault
+and catcher-path evidence remains pending.
+
+Budget precision: the 96 MiB limit describes logical live/retired buffer bytes,
+not a hard SlotPool mmap/RSS ceiling. Pool growth/fragmentation can exceed that
+sum before the idle shrink. `pool_bytes` needs a separate churn bound and native
+measurement before claiming bounded daemon RSS under arbitrary resize churn.
