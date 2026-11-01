@@ -874,6 +874,15 @@ def phase_pinned(rig):
     used = {by_id.get(int(s["output"].split("@")[1])) for s in layer_surfaces(reqs) if s["namespace"] == NAMESPACE and s["output"].startswith("wl_output@")}
     rig.check(used == {"HEADLESS-2"}, f"pinned: banners requested on {used}, expected only HEADLESS-2")
     rig.evidence["pinned_outputs"] = sorted(x for x in used if x)
+    def mapped_outputs():
+        latest = rig.trace("decnotify-pinned")
+        names = {int(i): n for i, n in re.findall(r'<- wl_output@(\d+)\.name, \(Some\("([^\"]+)"\)\)', latest)}
+        banners = {s["surface"] for s in layer_surfaces(requests(latest)) if s["namespace"] == NAMESPACE}
+        return {names.get(int(args[0].split("@")[1])) for obj, sid, event, args in events(latest)
+                if obj == "wl_surface" and sid in banners and event == "enter" and args and args[0].startswith("wl_output@")}
+    mapped = rig.settle(lambda: (lambda outputs: outputs if outputs else None)(mapped_outputs()), "pinned banner entered its requested output")
+    rig.check(mapped == {"HEADLESS-2"}, f"pinned: compositor mapped banner on {mapped}, expected HEADLESS-2")
+    rig.evidence["pinned_entered_outputs"] = sorted(x for x in mapped or set() if x)
 
 
 def phase_burst(rig):
