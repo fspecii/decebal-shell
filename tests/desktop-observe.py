@@ -68,6 +68,36 @@ class ObserveTests(unittest.TestCase):
             self.assertEqual(result[123]['ticks'], 23)
             self.assertNotIn('PRIVATE', json.dumps(result))
 
+    def test_disk_field_mapping_partitions_and_optional_flush_counters(self):
+        text = '259 0 nvme0n1 10 0 80 20 5 0 40 30 2 100 200 0 0 0 0 3 12\n259 1 nvme0n1p1 10 0 80 20 5 0 40 30 2 100 200\n8 0 old 1 0 2 3 4 0 5 6 0 7 8\ninvalid\n8 1 bad -1 0 2 3 4 0 5 6 0 7 8'
+        rows = observe.disk_counters(text, {'nvme0n1p1'})
+        self.assertEqual(set(rows), {'259:0:nvme0n1', '8:0:old'})
+        self.assertEqual(rows['259:0:nvme0n1']['read_ms'], 20)
+        self.assertEqual(rows['259:0:nvme0n1']['write_ms'], 30)
+        self.assertEqual(rows['259:0:nvme0n1']['flush_ops'], 3)
+        self.assertEqual(rows['259:0:nvme0n1']['flush_ms'], 12)
+        self.assertEqual(rows['8:0:old']['flush_ops'], 0)
+
+    def test_disk_interval_rates_ignore_the_decreasing_inflight_gauge(self):
+        a = observe.disk_counters('259 0 nvme0n1 10 0 80 20 5 0 40 30 10 100 200 0 0 0 0 3 12')
+        b = observe.disk_counters('259 0 nvme0n1 14 0 80 28 7 0 40 38 0 600 1200 0 0 0 0 4 22')
+        self.assertEqual(observe.disk_deltas(a, b, 2), [dict(device='nvme0n1', read_ops=4, write_ops=2, flush_ops=1,
+            read_await_ms=2.0, write_await_ms=4.0, flush_await_ms=10.0, active_time_percent=25.0,
+            average_queue_depth=.5, inflight_at_end=0)])
+        self.assertEqual(observe.disk_deltas(b, a, 2), [], 'reset counters cannot be charged as activity')
+        self.assertEqual(observe.disk_deltas({}, b, 2), [], 'new devices have no interval baseline')
+        with self.assertRaises(ValueError):
+            observe.disk_deltas(a, b, 0)
+
+    def test_disk_snapshot_excludes_partition_devices_without_reading_their_contents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stats = root / 'diskstats'
+            stats.write_text('259 0 disk 1 0 2 3 4 0 5 6 0 7 8\n259 1 part 1 0 2 3 4 0 5 6 0 7 8')
+            (root / 'part').mkdir()
+            (root / 'part/partition').write_text('1')
+            self.assertEqual(set(observe.disk_snapshot(stats, root)), {'259:0:disk'})
+
     def test_reports_are_private_and_never_overwrite_or_follow_a_symlink(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'report.json'

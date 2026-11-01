@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only Linux desktop I/O observation; no workload, arguments or environments are inspected."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -77,6 +78,59 @@ def pressure_delta(before, after, seconds):
             for k in ('some', 'full')}
 
 
+def disk_counters(text, partitions=()):
+    """Linux whole-device counters; field9 (in-flight) is a gauge, not monotonic."""
+    result = {}
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) < 14 or fields[2] in partitions or '/' in fields[2]:
+            continue
+        try:
+            major, minor = int(fields[0]), int(fields[1])
+            values = list(map(int, fields[3:]))
+            if min([major, minor, *values]) < 0:
+                continue
+        except ValueError:
+            continue
+        result[f'{major}:{minor}:{fields[2]}'] = dict(
+            device=fields[2], read_ops=values[0], read_ms=values[3],
+            write_ops=values[4], write_ms=values[7], inflight=values[8],
+            io_ms=values[9], weighted_ms=values[10],
+            flush_ops=values[15] if len(values) >= 17 else 0,
+            flush_ms=values[16] if len(values) >= 17 else 0)
+    return result
+
+
+def disk_snapshot(proc=Path('/proc/diskstats'), sysblock=Path('/sys/class/block')):
+    text = proc.read_text()
+    names = [row.split()[2] for row in text.splitlines() if len(row.split()) >= 3]
+    partitions = {name for name in names if '/' not in name and (sysblock / name / 'partition').exists()}
+    return disk_counters(text, partitions)
+
+
+def disk_deltas(before, after, seconds):
+    """Completion latency and activity estimates, never a device-health verdict."""
+    if seconds <= 0:
+        raise ValueError('positive disk observation interval required')
+    rows = []
+    keys = ('read_ops', 'read_ms', 'write_ops', 'write_ms', 'io_ms', 'weighted_ms', 'flush_ops', 'flush_ms')
+    for identity, current in after.items():
+        previous = before.get(identity)
+        if previous is None:
+            continue
+        delta = {key: current[key] - previous[key] for key in keys}
+        if min(delta.values()) < 0 or not (any(delta.values()) or current['inflight']):
+            continue
+        average = lambda duration, count: round(delta[duration] / delta[count], 3) if delta[count] else None
+        rows.append(dict(device=current['device'], read_ops=delta['read_ops'], write_ops=delta['write_ops'],
+                         flush_ops=delta['flush_ops'], read_await_ms=average('read_ms', 'read_ops'),
+                         write_await_ms=average('write_ms', 'write_ops'), flush_await_ms=average('flush_ms', 'flush_ops'),
+                         active_time_percent=round(delta['io_ms'] / seconds / 10, 3),
+                         average_queue_depth=round(delta['weighted_ms'] / seconds / 1000, 3),
+                         inflight_at_end=current['inflight']))
+    return sorted(rows, key=lambda row: (-row['active_time_percent'], row['device']))
+
+
 def write_report(path, report):
     # Never overwrite a prior diagnostic or follow a final-component symlink.
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -91,6 +145,7 @@ def main():
     parser.add_argument('--interval', type=float, default=1)
     parser.add_argument('--top', type=int, default=6)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--disks', action='store_true', help='include whole-device I/O counters; no disk workload is generated')
     args = parser.parse_args()
     if not (1 <= args.interval <= args.seconds <= 60 and 1 <= args.top <= 20):
         parser.error('require 1 <= interval <= seconds <= 60, and top between 1 and 20')
@@ -106,11 +161,14 @@ def main():
     hz = os.sysconf('SC_CLK_TCK')
     previous_tasks = tasks(proc, os.getuid())
     previous_psi = pressure_totals(proc / 'pressure/io')
+    previous_disks = disk_snapshot() if args.disks else None
     started = previous_at = time.monotonic()
     report = {'scope': 'global I/O PSI and same-UID processes present at both sample boundaries; '
               'not per-job attribution or a disk-health test. Short-lived processes and kernel writeback '
               'may be absent. No command arguments, environments or open file paths are read.',
-              'uid': os.getuid(), 'samples': [], 'interrupted': False}
+              'uid': os.getuid(), 'observer_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), 'samples': [], 'interrupted': False}
+    if args.disks:
+        report['disk_scope'] = 'Whole devices only, including device-mapper/virtual layers; never sum overlapping devices. Completion latency and active time are interval estimates, not saturation or disk-health proof. Reset/replaced counters are skipped.'
     try:
         while time.monotonic() - started < args.seconds:
             remaining = args.seconds - (time.monotonic() - started)
@@ -119,6 +177,7 @@ def main():
             time.sleep(min(args.interval, remaining))
             current_tasks = tasks(proc, os.getuid())
             current_psi = pressure_totals(proc / 'pressure/io')
+            current_disks = disk_snapshot() if args.disks else None
             now = time.monotonic()
             elapsed = now - previous_at
             rows = deltas(previous_tasks, current_tasks, elapsed, hz)
@@ -126,7 +185,10 @@ def main():
                 interval_seconds=round(elapsed, 3), **pressure_delta(previous_psi, current_psi, elapsed),
                 top_io=sorted(rows, key=lambda r: r['read_bytes'] + r['write_bytes'], reverse=True)[:args.top],
                 top_cpu=sorted(rows, key=lambda r: r['cpu_percent_one_core'], reverse=True)[:args.top]))
+            if args.disks:
+                report['samples'][-1]['disk_activity'] = disk_deltas(previous_disks, current_disks, elapsed)
             previous_at, previous_tasks, previous_psi = now, current_tasks, current_psi
+            previous_disks = current_disks
     except KeyboardInterrupt:
         report['interrupted'] = True
     report['seconds'] = round(time.monotonic() - started, 3)

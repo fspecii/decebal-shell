@@ -87,3 +87,12 @@ both slots and measures the existing I/O budget before creating the command.
 An over-budget observation refuses admission with exit 75, leaves jobs paused,
 and starts no fixture. It does not retry automatically or change the runtime
 pressure threshold. The observation accepts 1–30 seconds (0 disables it).
+
+Use `desktop_observe.py --disks --seconds 10 --out <fresh.json>` to include
+whole-device read/write/flush completion latency, active time and average queue
+depth alongside PSI and process activity. This only reads counters and creates
+no I/O workload. Partition rows are excluded; device-mapper and physical devices
+may describe the same I/O and must not be summed. Counter resets/new devices are
+skipped. Active time on modern parallel devices is not a saturation metric or a
+disk-health test. Field definitions follow the
+[Linux kernel I/O statistics documentation](https://docs.kernel.org/admin-guide/iostats.html).
