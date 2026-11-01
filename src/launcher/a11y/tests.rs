@@ -777,7 +777,11 @@ fn kickoffs_session_menu_is_modal_exposes_its_rows_and_gates_everything_else() {
     // everything unrelated is refused while the menu is open
     let app = list_items(&r).into_iter().find(|n| n.key.starts_with("apps/app:")).map(|n| n.key.clone()).expect("an app is showing");
     assert!(matches!(r.act(&app, Op::Action("activate")), Err(ActionError::Disabled)));
-    assert!(matches!(r.act(&app, Op::Focus), Err(ActionError::Disabled)));
+    let menu_focus = r.focus_key().map(String::from);
+    // GrabFocus is not a mutating operation in the shared validator. A deliberately
+    // non-focusable obscured node therefore reports Unsupported rather than Disabled.
+    assert!(matches!(r.act(&app, Op::Focus), Err(ActionError::Unsupported(_))));
+    assert_eq!(r.focus_key().map(String::from), menu_focus, "rejected background focus must keep the menu focus");
     assert!(matches!(r.act("search", Op::SetText("x".into())), Err(ActionError::Disabled)));
     assert!(matches!(r.act("footer/tab:places", click()), Err(ActionError::Disabled)));
     assert!(matches!(r.act("footer/sys:sleep", click()), Err(ActionError::Disabled)));

@@ -248,3 +248,16 @@ Not covered: Windows paints two hints (no pinned apps; no recent apps) only when
 its Recommended block fits, a decision made from geometry private to that style, so
 Windows, GNOME and UKUI (which list every app and paint no such text) have no empty
 note. Source tests for all of this are written and have not been built or run.
+
+Validation correction: a shared Cargo target reused a different worktree's test
+executable and ran zero launcher tests. That run is explicitly invalidated in
+`/var/tmp/decebal-launcher-a11y-completed-tests/result.json`; it is not a pass.
+A dedicated checkout-owned target, seeded only with dependency outputs and no
+root-crate fingerprints/incremental state, then compiled and executed 44 tests:
+43 passed and the modal-focus test expected the wrong error category. Focus is
+non-mutating in the common validator, so a non-focusable background node correctly
+returns Unsupported rather than Disabled. The test now checks that refusal and
+that menu focus remains unchanged. Evidence from the failed qualified run is
+retained in `/var/tmp/decebal-launcher-a11y-qualified-tests/`. A fresh passing run
+is still required. Earlier shared-target compilation records are superseded by
+this explicit-source/required-test-evidence process.
