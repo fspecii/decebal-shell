@@ -173,3 +173,21 @@ path = "src/bin/dectimer.rs"
 name = "qa_wayland_first_frame"
 path = "examples/qa_wayland_first_frame.rs"
 required-features = ["wayland"]
+
+# X11-only QA helper; not available in Wayland-only builds.
+[[example]]
+name = "fakewin"
+path = "examples/fakewin.rs"
+required-features = ["x11"]
+
+# X11-only QA helper; not available in Wayland-only builds.
+[[example]]
+name = "clipowner"
+path = "examples/clipowner.rs"
+required-features = ["x11"]
+
+# X11-only QA helper; not available in Wayland-only builds.
+[[example]]
+name = "x11-connect-check"
+path = "examples/x11-connect-check.rs"
+required-features = ["x11"]
