@@ -567,3 +567,12 @@ selection has a separate package-resolution contract. The Windows flat-token
 Classic value remains a legacy capture/fallback representation; the modern
 mode-specific style keys control rdwm. Native captures, capability fallback and
 full package tests must pass before deployment. No live theme was applied.
+
+Native-component package validation: all six engine golden tests passed at
+`950c3b0`, including full isolated apply planning through a private offline
+capability CLI. That fixture checks TOML syntax before its no-op check endpoint;
+it is not a real WM semantic validator. Evidence:
+`/var/tmp/decebal-theme-native-components-tests-retry3/result.json`. Earlier
+invalid-metric and missing/incomplete capability-fixture failures are retained
+in their original evidence directories. The shipped GNOME fixture equality and
+new package component integration tests still need execution.
