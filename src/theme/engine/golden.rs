@@ -109,23 +109,11 @@ fn applying_the_style_themes_matches_the_style_presets() {
     use crate::settings::io;
     use crate::theme::engine::apply::{self, tests::sandbox};
     use crate::theme::style::{self, Style};
-    // Mode-specific caption styles require capability proof. This fixture exposes the bundled
-    // target CLI schema without contacting a real WM, so shell-style tests still exercise full planning.
-    let capabilities = |dir: &std::path::Path, paths: &mut crate::settings::io::Paths| {
-        use std::os::unix::fs::PermissionsExt;
-        let ctl = dir.join("fixture-rdwmctl");
-        let schema = include_str!("../../settings/rdwm-schema.json");
-        std::fs::write(&ctl, format!("#!/bin/sh\nif [ \"$1 $2\" = \"schema --offline\" ]; then cat <<'RDWM_SCHEMA_EOF'\n{schema}\nRDWM_SCHEMA_EOF\nelse exit 2; fi\n")).unwrap();
-        std::fs::set_permissions(&ctl, std::fs::Permissions::from_mode(0o700)).unwrap();
-        paths.rdwmctl = ctl;
-    };
     for st in Style::ALL {
-        let (d, src, mut paths) = sandbox(&format!("style-{}", st.as_str()));
-        capabilities(&d, &mut paths);
+        let (d, src, paths) = sandbox(&format!("style-{}", st.as_str()));
         std::fs::write(&paths.rdwm_config, "[general]\n").unwrap();
         apply::apply(&src, &paths, st.theme_id(), &Selection::default()).unwrap();
-        let (d2, src2, mut paths2) = sandbox(&format!("style2-{}", st.as_str()));
-        capabilities(&d2, &mut paths2);
+        let (d2, src2, paths2) = sandbox(&format!("style2-{}", st.as_str()));
         std::fs::write(&paths2.rdwm_config, "[general]\n").unwrap();
         style::apply(&src2, &paths2, st, &Selection::default()).unwrap();
         for (key, edit) in style::dock_edits(st) {
