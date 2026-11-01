@@ -1262,7 +1262,7 @@ mod button_side_tests {
     #[test]
     fn invalid_mode_style_uses_the_valid_base_button_side_like_the_wm_contract() {
         for invalid in [serde_json::json!(42), serde_json::json!("bad style")] {
-            let mut def = Def::parse(MINI).unwrap();
+            let mut def = crate::theme::builtin::def("macos").unwrap();
             def.extra.insert("decoration".into(), serde_json::json!({"style":"classic","style_dark":invalid}));
             assert!(def.resolve("mini", true, &Selection::default()).window_buttons_right);
             assert_eq!(crate::theme::engine::decoration_compat::wanted(&def.extra, true).unwrap().desired, "classic");
