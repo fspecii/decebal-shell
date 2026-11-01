@@ -242,6 +242,24 @@ class PresentationBounds(unittest.TestCase):
         peaks, created = FIXTURE.buffer_peaks(buffers([31, 32, 33, -31, 31, 31]))
         self.assertEqual((peaks, created), ({18: 3}, 5))
 
+    def test_surface_id_reuse_does_not_merge_retired_buffer_generations(self):
+        first = '[0.0][rs] -> wl_compositor@3.create_surface(wl_surface@18)\n' + buffers([31,32,33])
+        next_surface = '[5.0][rs] -> wl_surface@18.destroy()\n[5.1][rs] -> wl_compositor@3.create_surface(wl_surface@18)\n'
+        peaks, created = FIXTURE.buffer_peaks(first + next_surface + buffers([34,35,36]))
+        self.assertEqual((peaks, created), ({18: 3}, 6))
+
+    def test_surface_id_reuse_keeps_old_callback_completions_separate(self):
+        first = '[0.0][rs] -> wl_compositor@3.create_surface(wl_surface@18)\n' + callbacks([40,41])
+        next_surface = '[5.0][rs] -> wl_surface@18.destroy()\n[5.1][rs] -> wl_compositor@3.create_surface(wl_surface@18)\n'
+        peaks, _ = FIXTURE.callback_peaks(first + next_surface + callbacks([42,43]))
+        self.assertEqual(peaks, {18: 2})
+        peaks, _ = FIXTURE.callback_peaks(first + next_surface + callbacks([42,43,-40,44]))
+        self.assertEqual(peaks, {18: 3}, "an old completion must not free a new generation's slot")
+
+    def test_server_deleted_callback_frees_its_slot_without_done(self):
+        trace = callbacks([40,41]) + '[3.0][rs] <- wl_display@1.delete_id, (40)\n' + callbacks([42])
+        self.assertEqual(FIXTURE.callback_peaks(trace), ({18: 2}, 3))
+
     def test_callbacks_outstanding_are_counted_and_released_by_done(self):
         peaks, requested = FIXTURE.callback_peaks(callbacks([40, 41, -40, 42, -41]))
         self.assertEqual((peaks, requested), ({18: 2}, 3))

@@ -277,40 +277,55 @@ def wire(trace):
 
 
 def buffer_peaks(trace):
-    """({surface: most shm buffers alive at once for it, counting buffers the compositor still held}, buffers created)."""
-    owner, live, peak, created = {}, {}, {}, 0
+    """Peak buffers per physical surface lifetime; retained buffers stay owned by their old generation."""
+    owner, live, peak, generations, created = {}, {}, {}, {}, 0
     for way, obj, ident, name, args in wire(trace):
         if way != "->":
             continue
-        if obj == "wl_shm_pool" and name == "create_buffer" and args:
+        if obj == "wl_compositor" and name == "create_surface" and args:
+            surface = int(args[0].split("@")[1])
+            generations[surface] = generations.get(surface, 0) + 1
+        elif obj == "wl_shm_pool" and name == "create_buffer" and args:
             created += 1
-            b = int(args[0].split("@")[1])
-            old = owner.pop(b, None)  # a recycled protocol id is a new buffer
+            old = owner.pop(int(args[0].split("@")[1]), None)
             if old is not None:
-                live[old].discard(b)
+                live[old[0]].discard(old[1])
         elif obj == "wl_surface" and name == "attach" and args and args[0].startswith("wl_buffer@"):
-            b = int(args[0].split("@")[1])
-            if b not in owner:
-                owner[b] = ident
-                live.setdefault(ident, set()).add(b)
-                peak[ident] = max(peak.get(ident, 0), len(live[ident]))
+            buffer = int(args[0].split("@")[1])
+            if buffer not in owner:
+                key = (ident, generations.get(ident, 0))
+                owner[buffer] = (key, buffer)
+                live.setdefault(key, set()).add(buffer)
+                peak[ident] = max(peak.get(ident, 0), len(live[key]))
         elif obj == "wl_buffer" and name == "destroy" and ident in owner:
-            live[owner.pop(ident)].discard(ident)
+            key, buffer = owner.pop(ident)
+            live[key].discard(buffer)
     return peak, created
 
 
 def callback_peaks(trace):
-    """{surface: most frame callbacks outstanding at once} and the number requested."""
-    owner, out, peak, requested = {}, {}, {}, 0
+    """Peak outstanding callbacks per physical surface lifetime, including server-side deletion."""
+    owner, outstanding, peak, generations, requested = {}, {}, {}, {}, 0
+    def release(callback):
+        key = owner.pop(callback, None)
+        if key is not None:
+            outstanding[key] -= 1
     for way, obj, ident, name, args in wire(trace):
-        if way == "->" and obj == "wl_surface" and name == "frame" and args:
+        if way == "->" and obj == "wl_compositor" and name == "create_surface" and args:
+            surface = int(args[0].split("@")[1])
+            generations[surface] = generations.get(surface, 0) + 1
+        elif way == "->" and obj == "wl_surface" and name == "frame" and args:
             requested += 1
-            owner[int(args[0].split("@")[1])] = ident
-            out[ident] = out.get(ident, 0) + 1
-            peak[ident] = max(peak.get(ident, 0), out[ident])
-        elif way == "<-" and obj == "wl_callback" and name == "done" and ident in owner:
-            surface = owner.pop(ident)
-            out[surface] -= 1
+            callback = int(args[0].split("@")[1])
+            release(callback)  # A reused protocol id cannot still refer to its old callback.
+            key = (ident, generations.get(ident, 0))
+            owner[callback] = key
+            outstanding[key] = outstanding.get(key, 0) + 1
+            peak[ident] = max(peak.get(ident, 0), outstanding[key])
+        elif way == "<-" and obj == "wl_callback" and name == "done":
+            release(ident)
+        elif way == "<-" and obj == "wl_display" and name == "delete_id" and args:
+            release(int(args[0]))
     return peak, requested
 
 
@@ -842,10 +857,12 @@ def phase_dnd(rig):
 def phase_themes(rig):
     """A live theme generation change preserves banner ids and deadlines."""
     rig.drain_banners()
+    # This case tests retheme deadlines, not the intentional deadline pause on hover.
+    rig.sway_cmd("seat", "seat0", "cursor", "set", "100", "650")
     cfg = rig.root / "cfg" / "decebal" / "decebal.json"
     cfg.write_text(json.dumps({"theme": "macos"}))
     ids = [rig.notify(summary=f"t{i}", timeout=60000) for i in range(3)]
-    state = rig.settle(lambda: (lambda b: b if {n["id"] for n in b["active"]} >= set(ids) else None)(rig.banners()), "all requested banners before the theme change")
+    state = rig.settle(lambda: (lambda b: b if {n["id"] for n in b["active"]} >= set(ids) and not any(n["hovered"] for n in b["active"]) else None)(rig.banners()), "all requested banners before the theme change")
     if not state:
         return
     deadlines = {b["id"]: b["deadline"] for b in state["active"]}
@@ -855,6 +872,9 @@ def phase_themes(rig):
     if changed:
         rig.check({b["id"]: b["deadline"] for b in changed["active"] if b["id"] in deadlines} == {k: v for k, v in deadlines.items() if k in {b["id"] for b in changed["active"]}}, "themes: a theme change reset deadlines")
         rig.check({b["id"] for b in changed["active"]} >= set(ids), "themes: a theme change dropped a banner")
+        rig.check(not any(b["hovered"] for b in changed["active"]), "themes: pointer entered a banner during the deadline case")
+        rig.evidence["theme_deadlines"] = {"before": deadlines, "after": {b["id"]: b["deadline"] for b in changed["active"]}}
+
 
 
 def phase_scales(rig):
