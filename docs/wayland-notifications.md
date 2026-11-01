@@ -181,3 +181,9 @@ callback gate remains intact. A regression releases a buffer 1 ms into the
 250 ms back-off and requires immediate reuse. Failure-path log throttling and
 the distinction between logical buffer bytes and SlotPool allocation remain
 open review findings. These latest edits have only been parsed/formatted so far.
+
+Presentation verification after the repair: all 14 exact `present.rs` tests
+passed, including immediate reuse after release during long back-off. Module
+SHA-256 `dbe5adaf9ab544293a1b1f1fc6f53f4c7acb2ef89cc6aa976e75e369302c3e22`;
+evidence `/var/tmp/decebal-notify-present-unit-repair/result.json`. The wl.rs
+layout-cache change is not compiled or runtime-qualified by this module run.
