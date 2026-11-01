@@ -137,7 +137,7 @@ does not save preferences or read/write Decebal configuration.
 
 ## Opening files and Open With
 
-**Under review; the original draft passed a compile check, and behavioural repairs await validation** (see the status below).
+**Under review; the original draft and corrected `23e09b8` passed compile checks; runtime acceptance is pending** (see the status below).
 
 - Enter or double click on a **folder** navigates as before. On a **file** it opens that exact
   item with its registered default application. In the columns layout a lone single click
@@ -183,8 +183,9 @@ does not save preferences or read/write Decebal configuration.
   path bytes, control enabled flags, selected search result).
 
 Status: the original `8997acc` passed `cargo check --all-targets` with unchanged source.
-The review repairs below have not yet been compile-checked. Rust tests, Clippy and native
-acceptance remain pending; no GUI application or default-handler installation was performed.
+The corrected `23e09b8` also passed `cargo check --locked --offline --all-targets`
+with unchanged source. Rust tests, Clippy and native acceptance remain pending; no GUI
+application or default-handler installation was performed.
 New Rust tests are in `src/opening.rs` (judge matrix, request identity and stale guards, exact path
 bytes, probe of files/folders/links/FIFO/missing/cancelled, an exact-argument launch test through a
 private `.desktop` recorder with spaced, metacharacter, newline and non-UTF8 names, and a missing
@@ -707,8 +708,10 @@ with unchanged source. Subsequent corrections below require new acceptance:
   application determines how it handles an ordinary document.
 
 The stage/selection cancellation matrix and foreign-program/mount-permission
-unit regressions are added but not yet run. The updated source is not native
-acceptance or a production/default-handler installation.
+unit regressions are added but not yet run. The corrected `23e09b8` compiles with
+all targets; its guarded Rust test attempt was refused before Cargo started due
+to measured I/O pressure. This is not native acceptance or a production/default-
+handler installation.
 
 Fixture isolation now hides host application/default registries through private
 `XDG_DATA_DIRS`/`XDG_CONFIG_DIRS`, while exposing only the system shared-MIME type
