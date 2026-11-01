@@ -196,21 +196,52 @@ def check_history_contract(trace, outputs, failures):
 
 
 def check_scale_protocol(trace, scale, failures):
-    """Integer scales use a buffer scale; a fractional one a viewport destination with buffer scale 1."""
-    reqs = requests(trace)
-    buffer_scales = {int(a[0]) for obj, _, req, a in reqs if obj == "wl_surface" and req == "set_buffer_scale" and a}
-    destinations = [tuple(int(v) for v in a) for obj, _, req, a in reqs if obj == "wp_viewport" and req == "set_destination" and len(a) == 2]
-    if float(scale).is_integer():
-        if int(scale) not in buffer_scales:
-            failures.append(f"scales: no set_buffer_scale({int(scale)}) for an integer scale ({sorted(buffer_scales)})")
-    else:
-        positive = [d for d in destinations if d[0] > 0]
-        if not positive:
-            failures.append("scales: a fractional scale sent no wp_viewport destination")
-        if buffer_scales - {1, 0}:
-            # surfaces from an earlier scale may remain in the trace; only the latest matters, so report not fail
-            pass
-    return {"buffer_scales": sorted(buffer_scales), "destinations": destinations[-4:]}
+    """Check live banner buffers against their actual logical extent, across object generations."""
+    surfaces, layers, viewports, buffers = {}, {}, {}, {}
+    ident = lambda value: int(value.rsplit("@", 1)[1])
+    for obj, oid, req, args in requests(trace):
+        if obj == "wl_compositor" and req == "create_surface":
+            surfaces[ident(args[0])] = {"buffer_scale": 1}
+        elif obj == "zwlr_layer_shell_v1" and req == "get_layer_surface":
+            sid = ident(args[1]); layers[ident(args[0])] = sid
+            surfaces.setdefault(sid, {"buffer_scale": 1})["namespace"] = unquote(args[4])
+        elif obj == "zwlr_layer_surface_v1" and req == "set_size" and oid in layers:
+            surfaces.setdefault(layers[oid], {})["logical"] = tuple(map(int, args))
+        elif obj == "wp_viewporter" and req == "get_viewport":
+            viewports[ident(args[0])] = ident(args[1])
+        elif obj == "wp_viewport" and req == "set_destination" and oid in viewports:
+            surfaces.setdefault(viewports[oid], {})["destination"] = tuple(map(int, args))
+        elif obj == "wp_viewport" and req == "destroy":
+            viewports.pop(oid, None)
+        elif obj == "wl_shm_pool" and req == "create_buffer":
+            buffers[ident(args[0])] = (int(args[2]), int(args[3]))
+        elif obj == "wl_buffer" and req == "destroy":
+            buffers.pop(oid, None)
+        elif obj == "wl_surface" and req == "set_buffer_scale":
+            surfaces.setdefault(oid, {})["buffer_scale"] = int(args[0])
+        elif obj == "wl_surface" and req == "attach":
+            surfaces.setdefault(oid, {})["pixels"] = buffers.get(ident(args[0])) if "@" in args[0] else None
+        elif obj == "wl_surface" and req == "destroy":
+            surfaces.pop(oid, None)
+    samples = []
+    for sid, state in surfaces.items():
+        if state.get("namespace") != NAMESPACE or not state.get("pixels"):
+            continue
+        pixels, logical = state["pixels"], state.get("logical")
+        dest, buffer_scale = state.get("destination"), state.get("buffer_scale", 1)
+        viewport = bool(dest and all(v > 0 for v in dest))
+        extent = dest if viewport else logical
+        valid = bool(extent and all(v > 0 for v in extent))
+        valid = valid and (buffer_scale == 1 if viewport else float(scale).is_integer() and buffer_scale == int(scale))
+        valid = valid and all(abs(p - round(v * scale)) <= (1 if viewport else 0) for p, v in zip(pixels, extent or ()))
+        if logical and viewport:
+            valid = valid and logical == dest
+        if not valid:
+            failures.append(f"scales: surface {sid} pixels={pixels}, logical={logical}, destination={dest}, buffer_scale={buffer_scale} do not match {scale}")
+        samples.append(dict(surface=sid, **state))
+    if not samples:
+        failures.append("scales: no live notification buffer to verify")
+    return {"samples": samples}
 
 
 def parse_signals(text):
@@ -294,13 +325,13 @@ def shm_mapping_bytes(maps):
     return total
 
 
-def history_input_ready(history, present):
+def history_input_ready(history, present, outputs=2):
     if not history or not present:
         return None
     surfaces = present["surfaces"]
     panel = any(s["id"] == history["window"] and s["kind"] == "Panel" and s["configured"] and s["buffers"] > 0 for s in surfaces)
     catchers = sum(s["kind"] == "Catcher" and s["configured"] and s["buffers"] > 0 for s in surfaces)
-    return history if panel and catchers == 2 else None
+    return history if panel and catchers == outputs else None
 
 
 def check_presentation_bounds(trace, present, failures, label):
@@ -511,7 +542,7 @@ class Rig:
         return sample
 
     def history_ready(self):
-        return history_input_ready(self.history(), self.present())
+        return history_input_ready(self.history(), self.present(), sum(o.get("active", False) for o in self.sway_cmd("-t", "get_outputs", query=True)))
 
     def rss_kb(self):
         for line in Path(f"/proc/{self.daemon.pid}/status").read_text().splitlines():
@@ -787,11 +818,11 @@ def phase_dnd(rig):
 
 
 def phase_themes(rig):
-    """A live theme change re-lays the banners out; ids, deadlines and hover survive."""
+    """A live theme generation change preserves banner ids and deadlines."""
     cfg = rig.root / "cfg" / "decebal" / "decebal.json"
     cfg.write_text(json.dumps({"theme": "macos"}))
     ids = [rig.notify(summary=f"t{i}", timeout=60000) for i in range(3)]
-    state = rig.settle(lambda: (lambda b: b if len(b["active"]) >= 3 else None)(rig.banners()), "banners before the theme change")
+    state = rig.settle(lambda: (lambda b: b if {n["id"] for n in b["active"]} >= set(ids) else None)(rig.banners()), "all requested banners before the theme change")
     if not state:
         return
     deadlines = {b["id"]: b["deadline"] for b in state["active"]}
@@ -806,6 +837,8 @@ def phase_themes(rig):
 def phase_scales(rig):
     """Integer and fractional scales, an output hotplug and hit alignment at every scale."""
     results = {}
+    if rig.monitor is None:
+        rig.start_monitor()
     for scale in (2, 1, 1.5):
         rig.sway_cmd("output", "HEADLESS-1", "scale", str(scale))
         time.sleep(0.8)
@@ -853,26 +886,34 @@ def phase_burst(rig):
     rig.settle(lambda: (rig.present() or {}).get("totals", {}).get("commits", 0) >= 1, "the banner's first frame was committed")
     points = [button_center(banner, "reply", 1.5), button_center(banner, "later", 1.5), close_center(banner, 1.5)]
     before = rig.present()["totals"]
+    motion_at = len(rig.trace())
     motions = 600
     # one IPC call: 600 pointer motions with nothing between them, alternating over the buttons (a hover repaint each)
     rig.sway_cmd("; ".join(f"seat seat0 cursor set {round(points[n % 3][0])} {round(points[n % 3][1])}" for n in range(motions)))
     time.sleep(2.0)
     after = rig.present()
     commits = after["totals"]["commits"] - before["commits"]
+    delivered = len(re.findall(r"<- wl_pointer@\d+\.motion", rig.trace()[motion_at:]))
+    rig.check(delivered > 0, "burst: no pointer motions reached the notification client")
     rig.check(commits < motions / 4, f"burst: {commits} commits for {motions} motions (frames were not coalesced)")
     rig.check(after["totals"]["coalesced"] - before["coalesced"] > 0 or commits < motions / 4, "burst: no frame was ever replaced before it was shown")
     rig.check(all(not s["frame_pending"] for s in after["surfaces"]), "burst: a frame is still waiting after the burst ended")
-    rig.evidence["burst_banner"] = {"motions": motions, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-banner")}
+    rig.evidence["burst_banner"] = {"motions": motions, "delivered_motions": delivered, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-banner")}
     # the history panel: 150 Tab presses in one wtype call, each moving the focus ring
+    panel_at = len(rig.trace())
     rig.cli("history", "show")
-    rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.enter", rig.trace()), "the panel has the keyboard")
+    rig.settle(rig.history_ready, "the burst panel and every output catcher committed")
+    rig.settle(lambda: re.search(r"<- wl_keyboard@\d+\.enter", rig.trace()[panel_at:]), "the new burst panel has the keyboard")
     before = rig.present()["totals"]
+    keys_at = len(rig.trace())
     rig.type(*(["-k", "Tab"] * 150))
     time.sleep(2.0)
     after = rig.present()
     commits = after["totals"]["commits"] - before["commits"]
+    delivered = len(re.findall(r"<- wl_keyboard@\d+\.key,", rig.trace()[keys_at:]))
+    rig.check(delivered >= 150, f"burst: only {delivered} raw key events reached the notification client")
     rig.check(commits < 150 / 2, f"burst: {commits} panel commits for 150 key presses")
-    rig.evidence["burst_panel"] = {"keys": 150, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-panel")}
+    rig.evidence["burst_panel"] = {"keys": 150, "delivered_key_events": delivered, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-panel")}
     rig.type("-k", "Escape")
     time.sleep(0.5)
 

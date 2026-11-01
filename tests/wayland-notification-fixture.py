@@ -117,16 +117,41 @@ class KeyboardAndHistory(unittest.TestCase):
 
 
 class Scales(unittest.TestCase):
-    def test_integer_uses_buffer_scale_and_fractional_a_viewport(self):
+    def trace(self, scale, size, destination):
+        lines = [
+            'wl_compositor@3.create_surface(wl_surface@18)',
+            'zwlr_layer_shell_v1@5.get_layer_surface(zwlr_layer_surface_v1@19, wl_surface@18, nil, 2, Some("decebal-notifications"))',
+            'zwlr_layer_surface_v1@19.set_size(230, 66)',
+            'wp_viewporter@4.get_viewport(wp_viewport@21, wl_surface@18)',
+            f'wp_viewport@21.set_destination({destination[0]}, {destination[1]})',
+            f'wl_surface@18.set_buffer_scale({scale})',
+            f'wl_shm_pool@22.create_buffer(wl_buffer@23, 0, {size[0]}, {size[1]}, {size[0]*4}, 0)',
+            'wl_surface@18.attach(wl_buffer@23, 0, 0)']
+        return "\n".join('[1.0][rs] -> ' + line for line in lines)
+
+    def test_integer_allows_buffer_scale_or_correct_viewport(self):
+        for trace in (self.trace(2, (460, 132), (-1, -1)), self.trace(1, (460, 132), (230, 66))):
+            failures = []
+            FIXTURE.check_scale_protocol(trace, 2, failures)
+            self.assertEqual(failures, [])
+
+    def test_fractional_viewport_is_checked_against_actual_pixels(self):
         failures = []
-        FIXTURE.check_scale_protocol("[1.0][rs] -> wl_surface@18.set_buffer_scale(2)", 2, failures)
+        FIXTURE.check_scale_protocol(self.trace(1, (345, 99), (230, 66)), 1.5, failures)
         self.assertEqual(failures, [])
-        FIXTURE.check_scale_protocol("[1.0][rs] -> wl_surface@18.set_buffer_scale(1)", 2, failures)
+        FIXTURE.check_scale_protocol(self.trace(1, (320, 99), (230, 66)), 1.5, failures)
         self.assertTrue(failures)
+
+    def test_missing_or_wrong_scale_is_refused(self):
+        for trace in ('', self.trace(1, (230, 66), (-1, -1))):
+            failures = []
+            FIXTURE.check_scale_protocol(trace, 2, failures)
+            self.assertTrue(failures)
+
+    def test_destroyed_surface_is_not_a_live_scale_sample(self):
         failures = []
-        FIXTURE.check_scale_protocol("[1.0][rs] -> wp_viewport@21.set_destination(229, 66)", 1.5, failures)
-        self.assertEqual(failures, [])
-        FIXTURE.check_scale_protocol("[1.0][rs] -> wl_surface@18.set_buffer_scale(2)", 1.5, failures)
+        trace = self.trace(2, (460, 132), (-1, -1)) + '\n[2.0][rs] -> wl_surface@18.destroy()'
+        FIXTURE.check_scale_protocol(trace, 2, failures)
         self.assertTrue(failures)
 
 
