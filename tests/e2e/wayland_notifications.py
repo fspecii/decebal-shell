@@ -314,6 +314,14 @@ def callback_peaks(trace):
     return peak, requested
 
 
+def debug_snapshot(path, previous=None):
+    """Debug files are ordinary writes: an in-flight partial write is not an empty desktop."""
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return previous
+
+
 def shm_mapping_bytes(maps):
     """Independent kernel mapping size, without retaining or reporting mapping paths."""
     total = 0
@@ -409,6 +417,7 @@ class Rig:
         self.sway = self.wayland = self.ipc = self.bus = self.daemon = None
         self.sink = self.sink_log = self.monitor = self.monitor_log = None
         self.pointer = None
+        self.debug_cache = {}
 
     # -- generic child handling
     def spawn(self, label, argv, env, stdout=None):
@@ -522,14 +531,26 @@ class Rig:
     def trace(self, label=None):
         return (self.root / f"{label or self.daemon_label}.log").read_text()
 
+    def read_debug(self, path, default=None):
+        value = debug_snapshot(path, self.debug_cache.get(path))
+        if value is not None:
+            self.debug_cache[path] = value
+        return value if value is not None else default
+
+    def drain_banners(self):
+        state = self.banners()
+        for notice in state["active"] + state["queued"]:
+            self.call("CloseNotification", "u", notice["id"])
+        self.settle(lambda: not self.banners()["active"] and not self.banners()["queued"], "previous scenario banners drained")
+
     def banners(self, label=None):
         path = self.root / f"{label or self.daemon_label}-banners.json"
-        return json.loads(path.read_text()) if path.exists() and path.stat().st_size else {"active": [], "queued": []}
+        return self.read_debug(path, {"active": [], "queued": []})
 
     def present(self, label=None):
         """The daemon's presentation counters (buffers, frame callbacks, commits), or None before the first commit."""
         path = self.root / f"{label or self.daemon_label}-present.json"
-        return json.loads(path.read_text()) if path.exists() and path.stat().st_size else None
+        return self.read_debug(path)
 
     def shm_sample(self):
         # Popen keeps an exited child unreaped until poll(), preventing PID reuse
@@ -552,7 +573,7 @@ class Rig:
 
     def history(self, label=None):
         path = self.root / f"{label or self.daemon_label}-history.json"
-        return json.loads(path.read_text()) if path.exists() and path.stat().st_size else None
+        return self.read_debug(path)
 
     def start_monitor(self):
         self.monitor_log = self.root / "signals.txt"
@@ -800,6 +821,7 @@ def phase_persistence(rig):
 
 def phase_dnd(rig):
     """DND hides normal banners, lets critical through, and sounds follow the shared rules."""
+    rig.drain_banners()
     play = rig.root / "sounds.log"
     (rig.bin / "canberra-gtk-play").write_text(f"#!/bin/sh\necho \"$@\" >> '{play}'\n")
     (rig.bin / "canberra-gtk-play").chmod(0o500)
@@ -819,6 +841,7 @@ def phase_dnd(rig):
 
 def phase_themes(rig):
     """A live theme generation change preserves banner ids and deadlines."""
+    rig.drain_banners()
     cfg = rig.root / "cfg" / "decebal" / "decebal.json"
     cfg.write_text(json.dumps({"theme": "macos"}))
     ids = [rig.notify(summary=f"t{i}", timeout=60000) for i in range(3)]
@@ -836,6 +859,7 @@ def phase_themes(rig):
 
 def phase_scales(rig):
     """Integer and fractional scales, an output hotplug and hit alignment at every scale."""
+    rig.drain_banners()
     results = {}
     if rig.monitor is None:
         rig.start_monitor()
@@ -887,6 +911,7 @@ def phase_pinned(rig):
 
 def phase_burst(rig):
     """A burst of input on a banner and on the history panel: bounded buffers and callbacks, coalesced commits."""
+    rig.drain_banners()
     rig.sway_cmd("focus", "output", "HEADLESS-1")
     pid = rig.notify(summary="burst", actions=[("reply", "Reply"), ("later", "Later")], timeout=60000)
     banner = rig.settle(lambda: next((b for b in rig.banners()["active"] if b["id"] == pid), None), "burst banner shown")
@@ -924,11 +949,12 @@ def phase_burst(rig):
     rig.check(commits < 150 / 2, f"burst: {commits} panel commits for 150 key presses")
     rig.evidence["burst_panel"] = {"keys": 150, "delivered_key_events": delivered, "commits": commits, "bounds": check_presentation_bounds(rig.trace(), after, rig.failures, "burst-panel")}
     rig.type("-k", "Escape")
-    time.sleep(0.5)
+    rig.settle(lambda: (lambda p: p if p and not any(s["kind"] in ("Panel", "Catcher") for s in p["surfaces"]) else None)(rig.present()), "burst panel closed before the next scenario")
 
 
 def phase_churn(rig):
     """Scale and size churn with banners and the panel up never passes the bounds; everything is given back when idle."""
+    rig.drain_banners()
     rig.sway_cmd("focus", "output", "HEADLESS-1")
     ids = [rig.notify(summary=f"churn {i}", actions=[("reply", "Reply")], timeout=60000) for i in range(3)]
     rig.settle(lambda: len(rig.banners()["active"]) >= 3, "banners before the churn")

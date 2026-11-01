@@ -4,6 +4,7 @@ No compositor, bus, process or desktop connection is used."""
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
 from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("notify_fixture", Path(__file__).parent / "e2e/wayland_notifications.py")
@@ -114,6 +115,26 @@ class KeyboardAndHistory(unittest.TestCase):
         failures = []
         FIXTURE.check_history_contract(trace.replace("wl_output@14", "wl_output@13"), 2, failures)
         self.assertTrue(any("catchers on 1 outputs" in f for f in failures))
+
+
+class Snapshots(unittest.TestCase):
+    def test_partial_debug_write_retains_last_valid_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "debug.json"
+            self.assertIsNone(FIXTURE.debug_snapshot(path))
+            path.write_text('{"active":[{"id":7}],"queued":[]}')
+            before = FIXTURE.debug_snapshot(path)
+            path.write_text('{"active":')
+            self.assertEqual(FIXTURE.debug_snapshot(path, before), before)
+            path.write_text('{"active":[],"queued":[]}')
+            self.assertEqual(FIXTURE.debug_snapshot(path, before), {"active": [], "queued": []})
+
+    def test_drain_closes_both_visible_and_queued_notices(self):
+        rig = object.__new__(FIXTURE.Rig)
+        rig.banners = Mock(return_value={"active": [{"id": 1}], "queued": [{"id": 2}]})
+        rig.call, rig.settle = Mock(), Mock()
+        rig.drain_banners()
+        self.assertEqual([call.args for call in rig.call.call_args_list], [("CloseNotification", "u", 1), ("CloseNotification", "u", 2)])
 
 
 class Scales(unittest.TestCase):
