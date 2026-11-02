@@ -5,6 +5,7 @@
 """
 import importlib.util
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -227,16 +228,31 @@ class Provenance(unittest.TestCase):
         _, problems = B.read_licence(self.repo, self.pinned, ".reuse/dep5")
         self.assertTrue(problems)
 
+    def git_only_env(self):
+        tools = os.path.join(self.tmp.name, "tools")
+        os.mkdir(tools)
+        os.symlink(shutil.which("git"), os.path.join(tools, "git"))
+        return dict(ENV, PATH=tools)
+
     def test_the_command_line_refuses_dirty_input_unless_told_and_then_labels_it(self):
         """The whole tool against a throwaway repository whose revision is allowed explicitly (it needs `magick` only to convert, so the
         refusal paths run without it)."""
         tool = os.path.join(HERE, "build_nirvana.py")
         write(os.path.join(self.src, "a.dci"), b"x", "ab")
         r = subprocess.run([sys.executable, "-I", tool, "--upstream", self.repo, "--out", os.path.join(self.tmp.name, "out"), "--allow-other-revision"],
-                           env=ENV, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                           env=self.git_only_env(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn(b"differ from", r.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "out")), "nothing is written when the input is not the revision")
+
+    def test_clean_cli_input_still_requires_converter_before_creating_output(self):
+        out = os.path.join(self.tmp.name, "out")
+        r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "build_nirvana.py"),
+                            "--upstream", self.repo, "--out", out, "--allow-other-revision"],
+                           env=self.git_only_env(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(b"ImageMagick", r.stderr)
+        self.assertFalse(os.path.exists(out))
 
 
 if __name__ == "__main__":
