@@ -286,8 +286,6 @@ def main():
     rev = git(up, "rev-parse", "HEAD").decode().strip()
     if rev != PINNED and not a.allow_other_revision:
         raise SystemExit(f"upstream is at {rev}, the pinned revision is {PINNED}")
-    magick = shutil.which("magick") or sys.exit("ImageMagick (magick) with WebP support is needed")
-    version = subprocess.check_output([magick, "-version"], text=True).splitlines()[0]
     src = os.path.join(up, "nirvana", "dsg-icons", "nirvana")
     if not os.path.isdir(src) or os.path.islink(src):
         raise SystemExit(f"{src} is not a plain directory")
@@ -327,6 +325,9 @@ def main():
     root = os.path.join(out, "nirvana")
     if os.path.lexists(out):
         raise SystemExit(f"{out} exists; refusing to overwrite (use a fresh directory)")
+    # Refuse unverified input before requiring or executing conversion tools.
+    magick = shutil.which("magick") or sys.exit("ImageMagick (magick) with WebP support is needed")
+    version = subprocess.check_output([magick, "-version"], text=True).splitlines()[0]
     os.makedirs(out, mode=0o700)
     os.makedirs(os.path.join(root, str(a.size)))
     icons, skipped = {}, {}

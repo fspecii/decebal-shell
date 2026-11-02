@@ -39,6 +39,81 @@ This change covers colours. Existing fixed row metrics do not fully reflow for
 200% accessibility text, and cached application icons do not reload on an icon
 pack change. These remain separate layout/icon integration work.
 
-Private native regression: `MS_BIN_DIR=target/debug bash tests/e2e/notify-theme.sh`.
-Set `NOTIFY_THEME_EVIDENCE_DIR` to retain screenshots and `E2E_DISPLAY` to choose
-an unused private X display. No build, installation or live session is performed.
+## Private native regressions (X11)
+
+`tests/e2e/notify-history.sh` (persistence failures, Retry, merge, restart, with
+a private `rdwm`) and `tests/e2e/notify-theme.sh` (theme and icon repaint) run the
+real `decnotify` on resources owned by `tests/e2e/notify_private.py`. Nothing is
+built, installed or defaulted: the caller supplies already built, unchanging
+binaries (a changed binary fails the run).
+
+```
+MS_BIN_DIR=/abs/bin RDWM_BIN_DIR=/abs/rdwm-bin bash tests/e2e/notify-history.sh
+MS_BIN_DIR=/abs/bin bash tests/e2e/notify-theme.sh
+```
+
+`MS_BIN_DIR` (decnotify, and decthemectl for the theme run) and `RDWM_BIN_DIR`
+(rdwm) are required absolute paths. Optional: `NOTIFY_HISTORY_EVIDENCE_DIR` /
+`NOTIFY_THEME_EVIDENCE_DIR` name a **new** directory (an existing one is refused)
+for screenshots, child logs, debug JSON and `cleanup.json`; `KEEP_TMP=1` keeps
+the private tree of a theme pass. `E2E_DISPLAY` is optional and must be inside the
+private display namespace `:700`..`:65535`; the old default displays (`:348`,
+`:367`) are no longer accepted. Without it a free display is allocated. An
+occupied explicit display is never adopted or removed (history exits 77, theme
+fails).
+
+Isolation: the environment is built from scratch (private HOME/XDG tree, dead
+system bus, `DECEBAL_SYSTEM_AUTOMATIC=0`, no session, backend, Wayland or
+`RDWM_*` variables). The Xvfb is started by `tests/e2e/private_x11.py` and its
+listening sockets are re-proven to belong to that exact process before every
+`xdotool`/`xprop`/`import` call. The session bus uses a fixed configuration
+without service activation and its socket is checked with kernel peer
+credentials. Every child is owned through a pidfd.
+
+Cleanup: SIGTERM/SIGINT/SIGHUP stop the test immediately and run cleanup (exit
+`128+N`). All children get SIGTERM together with a bounded total grace; any that
+need SIGKILL, leave process-group members behind, or cannot be reaped fail the
+run. Failed, interrupted or force-cleaned runs keep the private tree and the
+fresh evidence; a clean pass removes the tree. Prerequisites that are missing
+(tools, binaries, non-root uid for the permission-denied scenarios) exit 77 for
+history and fail for theme. Fixture unit checks (no processes started):
+`python3 tests/e2e/notify-private-test.py`.
+
+
+### X11 cancellation through D-Bus callbacks
+
+The owned fixture latches termination signals as well as raising them. The native
+X11 attempt at `/var/tmp/decebal-notify-x11-theme-qualified/` reached its repaint
+assertions, but was interrupted by the resource guard at 18.1% full I/O stalls;
+it is **not a passing gate**. Its D-Bus callback boundary swallowed a Python
+signal-handler exception. Checkpoints now rethrow that latched cancellation at
+normal Python wait/tool boundaries and at the top-level return. Cleanup evidence
+also retains the signal, and an interrupted run cannot return success even if a
+callback caught the original exception. Two mocked callback regressions join the
+26 existing helper tests; all 28 pass. A fresh native run is still required.
+
+
+The subsequent fresh run with the cancellation fix passed:
+`/var/tmp/decebal-notify-x11-theme-qualified-retry1/result.json` (17.24 seconds,
+fixture `4002a4f`, development daemon `b729545`). Its cleanup record has no forced
+kills, failures or interruption. It verifies persistent toast/history repainting,
+independent palette/dynamic/light/missing-theme selections, DND and storage
+preservation, icon A→B refresh including negative-cache recovery, image hints and
+banner identity/deadline preservation. The first interrupted attempt stays failed.
+This does not qualify the separate X11 storage/history workflow, an optimized
+binary or a physical desktop.
+
+
+The owned X11 storage/history workflow also passed independently:
+`/var/tmp/decebal-notify-x11-history-qualified/result.json` (18.58 seconds,
+fixture `0233b85`, same development daemon). Real EACCES warning/Retry, failed
+D-Bus and native Clear preserving durable bytes, transient exclusion, restart
+restoration, symlink/corrupt/unreadable preservation, merge/rekey and content-free
+diagnostics all passed. Cleanup recorded no forced kills, failures or interruption.
+The WM was a frozen older artifact (SHA256
+`e4980f9eeb9cdc28962721d036a902cf2cc9669a89c9e6407b9e5187978f15ee`),
+used only as the private fixture environment. This qualifies neither the latest
+WM nor an optimized notification daemon. Together with the fresh X11 theme gate
+and the complete 12-phase Wayland development run, this closes the planned
+**development-binary** notification transport gates; optimized/full-suite and
+physical hardware acceptance remain open.

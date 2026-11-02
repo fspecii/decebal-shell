@@ -1,15 +1,26 @@
 //! decnotify: a freedesktop notification daemon (org.freedesktop.Notifications) with macOS-style banners.
 //!
-//! The bus side lives here (method dispatch, signals, the event loop); drawing and input are in [`ui`].
+//! The bus side lives here (method dispatch, signals, the event loop); drawing and input are in a front end:
+//! [`ui`] on X11 and [`wl`] on a Wayland compositor with wlr-layer-shell, picked by `backend::session` like every
+//! other Decebal program. The queue, layout, deadline and history rules they share are in [`view`] and [`history`].
 //! The daemon exits quietly when another daemon (mako, dunst, ...) already owns the name, so it can be
-//! started unconditionally from an X11 session script.
+//! started unconditionally from a session script.
 
+pub mod geom;
+pub mod history;
 pub mod model;
+pub mod present;
 pub mod sound;
 #[cfg(feature = "x11")]
 pub mod ui;
+pub mod view;
+#[cfg(feature = "wayland")]
+pub mod wl;
 
 pub use model::{Config, History};
+use std::os::fd::RawFd;
+use std::time::{Duration, Instant};
+pub use view::UiEvent;
 
 use crate::dbus::{self, Conn, Message, Value, Writer};
 use model::{parse_notify, HistoryItem};
@@ -223,17 +234,63 @@ pub enum Start {
     Ran,
     /// Another daemon owns the name; nothing was started.
     NameTaken,
+    /// No X11 or Wayland server this build can draw on (no `DISPLAY`, no compositor with wlr-layer-shell); the name
+    /// was not requested, so another daemon is free to take it.
+    NoDisplay,
 }
 
-/// Runs the daemon until the bus or the X server goes away.
-#[cfg(feature = "x11")]
+/// What woke a front end's [`Frontend::wait`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Wake {
+    /// The session bus has data.
+    pub bus: bool,
+    /// The theme watcher saw a change.
+    pub theme: bool,
+}
+
+/// What the bus loop needs from a display server front end. Everything here runs on the one thread of the daemon,
+/// which sleeps in a single `poll` over the bus, the display connection and the theme watcher.
+pub trait Frontend {
+    /// Shows `n`, or updates the banner or queued entry with the same id.
+    fn show(&mut self, n: model::Notification, secs: u32);
+    /// Closes `id` (a visible banner or a queued entry) with the spec's `reason`.
+    fn close(&mut self, id: u32, reason: u32) -> Vec<UiEvent>;
+    fn history_open(&self) -> bool;
+    /// Opens the history panel (dismissing every banner and queued entry), or closes it when it is open.
+    fn toggle_history(&mut self, sh: &Shared) -> Vec<UiEvent>;
+    fn refresh_history(&mut self, sh: &Shared);
+    fn refresh_theme(&mut self, sh: &Shared);
+    /// The earliest moment a banner expires, if any can.
+    fn next_deadline(&self) -> Option<Instant>;
+    fn expire(&mut self, now: Instant) -> Vec<UiEvent>;
+    /// Sleeps until the bus (`bus_fd`), the display connection, the theme watcher or `timeout`.
+    fn wait(&mut self, bus_fd: RawFd, timeout: Option<Duration>) -> Result<Wake, String>;
+    /// Handles the display events that arrived; returns what to tell the bus.
+    fn pump(&mut self, sh: &mut Shared) -> Result<Vec<UiEvent>, String>;
+}
+
+/// Runs the daemon until the bus or the display server goes away.
 pub fn run_daemon() -> Result<Start, String> {
-    use std::time::Instant;
+    use crate::backend::session::panel_mode;
+    // Decided first, without touching the bus: a session this build cannot draw on must not take the name.
+    let Some(mode) = panel_mode() else { return Ok(Start::NoDisplay) };
     let mut conn = Conn::session().map_err(|e| format!("session bus: {e}"))?;
     if !conn.request_name(BUS_NAME, false).map_err(|e| e.to_string())? {
         return Ok(Start::NameTaken);
     }
-    let mut ui = ui::Ui::connect()?;
+    match mode {
+        #[cfg(feature = "x11")]
+        crate::backend::session::Mode::X11 => serve(conn, ui::Ui::connect()?),
+        #[cfg(feature = "wayland")]
+        crate::backend::session::Mode::Wayland => serve(conn, wl::WlUi::connect()?),
+        #[allow(unreachable_patterns)]
+        _ => Ok(Start::NoDisplay),
+    }
+}
+
+/// The bus loop shared by every front end.
+#[cfg_attr(not(any(feature = "x11", feature = "wayland")), allow(dead_code))]
+fn serve<F: Frontend>(mut conn: Conn, mut ui: F) -> Result<Start, String> {
     conn.set_nonblocking(true).map_err(|e| e.to_string())?;
     let mut sh = Shared { cfg: Config::load(), history: History::load() };
     let mut daemon = Daemon::new();
@@ -243,12 +300,12 @@ pub fn run_daemon() -> Result<Start, String> {
 
     loop {
         let timeout = ui.next_deadline().map(|d| d.saturating_duration_since(Instant::now()));
-        let ready = crate::backend::poll_readable(&[conn.fd(), ui.fd(), ui.theme_fd()], timeout).map_err(|e| e.to_string())?;
+        let wake = ui.wait(conn.fd(), timeout)?;
         let mut events = Vec::new();
-        if ready[2] {
+        if wake.theme {
             ui.refresh_theme(&sh);
         }
-        if ready[0] {
+        if wake.bus {
             if !conn.fill().map_err(|e| e.to_string())? {
                 return Ok(Start::Ran); // bus went away: the session is ending
             }
@@ -290,8 +347,8 @@ pub fn run_daemon() -> Result<Start, String> {
         events.extend(ui.expire(Instant::now()));
         for ev in events {
             let sig = match ev {
-                ui::UiEvent::Closed(id, reason) => signal_closed(id, reason),
-                ui::UiEvent::Action(id, key) => signal_action(id, &key),
+                UiEvent::Closed(id, reason) => signal_closed(id, reason),
+                UiEvent::Action(id, key) => signal_action(id, &key),
             };
             conn.send(&sig).map_err(|e| e.to_string())?;
         }

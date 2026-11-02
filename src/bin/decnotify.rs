@@ -3,7 +3,7 @@
 use decebal::dbus::Writer;
 use decebal::notify::{self, Config, Start};
 
-const HELP: &str = "decnotify - freedesktop notification daemon with macOS-style banners (X11)
+const HELP: &str = "decnotify - freedesktop notification daemon with macOS-style banners (X11 and Wayland)
 
 Usage:
   decnotify                 run the daemon (exits quietly if mako, dunst, ... already own the name)
@@ -21,7 +21,11 @@ Settings: ~/.config/decebal/notifications.toml
   dnd = false            # silence sounds and quiet banners; critical banners may still appear; history is kept
   sounds = false         # optional event sounds; needs canberra-gtk-play and a sound theme
   banner_seconds = 5     # how long a banner stays
-  muted_apps = []        # app names / desktop-entry ids that never show banners or play sounds";
+  muted_apps = []        # app names / desktop-entry ids that never show banners or play sounds
+
+Display: X11, or a Wayland compositor with wlr-layer-shell, chosen like every Decebal program (DECEBAL_BACKEND=x11|wayland
+forces one). On Wayland, banners are top-right layer surfaces that never take the keyboard; DECNOTIFY_OUTPUT=NAME pins them to
+one output and DECNOTIFY_WAYLAND_INSETS=theme adds the theme's bar insets for bars that reserve no exclusive zone.";
 
 fn die(msg: &str) -> ! {
     eprintln!("decnotify: {msg}");
@@ -117,18 +121,10 @@ fn dnd(what: &str) {
 }
 
 fn daemon() {
-    // Only on X11: a Wayland compositor has its own daemon (mako) and layer-shell notifications.
-    if std::env::var_os("DISPLAY").is_none() {
-        eprintln!("decnotify: no X11 DISPLAY; nothing to do");
-        return;
-    }
-    if std::env::var_os("DECNOTIFY_FORCE").is_none() && std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland") {
-        eprintln!("decnotify: Wayland session; leaving notifications to the compositor's daemon (DECNOTIFY_FORCE=1 overrides)");
-        return;
-    }
     match notify::run_daemon() {
         Ok(Start::Ran) => {}
         Ok(Start::NameTaken) => eprintln!("decnotify: org.freedesktop.Notifications is already owned by another daemon; exiting"),
+        Ok(Start::NoDisplay) => eprintln!("decnotify: no usable display (an X11 DISPLAY, or a Wayland compositor with wlr-layer-shell); nothing to do"),
         Err(e) => die(&e),
     }
 }
