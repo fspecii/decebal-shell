@@ -454,10 +454,23 @@ static CURRENT: RwLock<Option<Arc<Theme>>> = RwLock::new(None);
 static GEN: AtomicU64 = AtomicU64::new(1);
 static SCALE_BITS: AtomicU32 = AtomicU32::new(0x3f80_0000); // 1.0
 
+#[cfg(test)]
+thread_local! {
+    /// Test only: the generation a thread that pinned its own theme sees ([`thread_theme`]), advanced only by what that thread
+    /// publishes, so other tests changing the process-wide theme cannot make its apps think the theme changed under them.
+    static THREAD_GEN: std::cell::Cell<u64> = const { std::cell::Cell::new(1) };
+}
+
+fn bump_generation() {
+    GEN.fetch_add(1, Ordering::Relaxed);
+    #[cfg(test)]
+    THREAD_GEN.with(|g| g.set(g.get() + 1));
+}
+
 fn publish(t: Arc<Theme>) {
     SCALE_BITS.store(t.font_scale.to_bits(), Ordering::Relaxed);
     *CURRENT.write().unwrap() = Some(t);
-    GEN.fetch_add(1, Ordering::Relaxed);
+    bump_generation();
 }
 
 /// The theme every drawing routine uses. Loaded on first use.
@@ -507,6 +520,10 @@ pub fn publish_theme(t: Theme) {
 
 /// Changes whenever [`current`] changed; compare with the value seen at the last draw.
 pub fn generation() -> u64 {
+    #[cfg(test)]
+    if THREAD_THEME.with(|slot| slot.borrow().is_some()) {
+        return THREAD_GEN.with(std::cell::Cell::get);
+    }
     GEN.load(Ordering::Relaxed)
 }
 
@@ -532,7 +549,7 @@ pub fn reload() -> bool {
         publish(l.theme.clone());
         true
     } else if icons {
-        GEN.fetch_add(1, Ordering::Relaxed);
+        bump_generation();
         true
     } else {
         false

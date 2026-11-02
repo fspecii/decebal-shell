@@ -219,6 +219,8 @@ pub(super) mod tests {
         pub app: DockApp,
         pub log: Arc<Mutex<Log>>,
         pub dir: PathBuf,
+        /// Keeps the fixed theme of this test's thread for as long as the rig lives (see [`parts`]).
+        pub _theme: crate::theme::live::ThreadTheme,
     }
 
     pub(in crate::dock_app) fn window(id: u64, app: &str, active: bool) -> Window {
@@ -227,15 +229,20 @@ pub(super) mod tests {
 
     /// A dock at `edge` with these pinned ids (plus the fixed Launchpad / Trash ends if asked), these windows and private files.
     pub(in crate::dock_app) fn rig(name: &str, edge: Edge, pinned: &[&str], windows: Vec<Window>, reduce_motion: bool) -> Rig {
-        let (app, log, dir) = parts(name, edge, pinned, windows, reduce_motion);
-        Rig { app, log, dir }
+        let (app, log, dir, _theme) = parts(name, edge, pinned, windows, reduce_motion);
+        Rig { app, log, dir, _theme }
     }
 
-    /// The pieces of [`rig`], for tests that wrap the app themselves (the display scale).
-    pub(in crate::dock_app) fn parts(name: &str, edge: Edge, pinned: &[&str], windows: Vec<Window>, reduce_motion: bool) -> (DockApp, Arc<Mutex<Log>>, PathBuf) {
+    /// The pieces of [`rig`], for tests that wrap the app themselves (the display scale). The last one pins the default theme
+    /// for this test's thread, and with it the theme generation the app compares on every tick: the dock re-applies its
+    /// settings (dropping the hover, the keyboard ring and the eased sizes these tests measure) whenever the process-wide
+    /// generation moves, which any other test publishing a theme in parallel makes happen.
+    pub(in crate::dock_app) fn parts(name: &str, edge: Edge, pinned: &[&str], windows: Vec<Window>, reduce_motion: bool) -> (DockApp, Arc<Mutex<Log>>, PathBuf, crate::theme::live::ThreadTheme) {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!("decebal-dockkb-{name}-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::create_dir_all(&dir).unwrap();
+        let src = crate::theme::live::Source { shell_json: dir.join("decebal.json"), themes_dir: dir.join("themes") };
+        let theme = crate::theme::live::thread_theme(src.theme_for(crate::theme::builtin::DEFAULT_ID, &crate::theme::model::Selection::default(), false).unwrap());
         let items: Vec<DockItem> = pinned.iter().map(|id| DockItem::pinned(id, false)).collect();
         let log = Arc::new(Mutex::new(Log::default()));
         let tracker = Tracker::default();
@@ -250,7 +257,7 @@ pub(super) mod tests {
         app.tick();
         let (w, h) = app.size();
         app.resized(w, h);
-        (app, log, dir)
+        (app, log, dir, theme)
     }
 
     impl Rig {

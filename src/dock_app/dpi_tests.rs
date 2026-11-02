@@ -10,7 +10,7 @@ use crate::panel::Edge;
 const SCALES: [f32; 3] = [1.0, 1.25, 2.0];
 const APPS: [&str; 5] = ["launchpad", "foot", "firefox", "nautilus", "trash"];
 
-struct Guard(PathBuf);
+struct Guard(PathBuf, crate::theme::live::ThreadTheme);
 impl Drop for Guard {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
@@ -21,8 +21,8 @@ type Log = Arc<Mutex<super::keyboard::tests::Log>>;
 use std::sync::{Arc, Mutex};
 
 fn desk(name: &str, edge: Edge, scale: f32, apps: &[&str], reduce_motion: bool) -> (Scaled<DockApp>, Log, Guard) {
-    let (app, log, dir) = parts(name, edge, apps, vec![], reduce_motion);
-    (Scaled::new(app, scale), log, Guard(dir))
+    let (app, log, dir, theme) = parts(name, edge, apps, vec![], reduce_motion);
+    (Scaled::new(app, scale), log, Guard(dir, theme))
 }
 
 /// Settles the surface the way the backend does: the window gets the size the app asks for, clamped to the output.
@@ -103,7 +103,9 @@ fn the_pixels_the_ring_and_the_pointer_agree_at_every_scale_on_every_edge() {
     for edge in EDGES {
         let mut ring_size_at_one = None;
         for s in SCALES {
-            let (mut a, log, _g) = desk("dpi-map", edge, s, &APPS, false);
+            // Reduced motion: the ring is measured as the box of every pixel that changed, and with the dock animating (the bounce, the
+            // eased sizes) the faint outer pixels of that box depend on how far each animation has got, not on the scale being tested.
+            let (mut a, log, _g) = desk("dpi-map", edge, s, &APPS, true);
             let size = settle(&mut a, None);
             let plain = render(&mut a, size);
             assert_eq!((plain.width(), plain.height()), size);
@@ -247,8 +249,8 @@ fn a_dock_with_far_too_many_items_still_never_exceeds_the_output() {
 
 #[test]
 fn the_taskbar_keeps_scaling_itself_and_the_dock_takes_the_backend_scale_only_in_the_mac_style() {
-    let (app, _log, dir) = parts("dpi-style", Edge::Bottom, &APPS, vec![], false);
-    let _g = Guard(dir.clone());
+    let (app, _log, dir, theme) = parts("dpi-style", Edge::Bottom, &APPS, vec![], false);
+    let _g = Guard(dir.clone(), theme);
     let mut a = Scaled::new(app, 2.0);
     assert!(a.backend_scaled(), "the macOS dock is scaled by the backend");
     assert_eq!(a.size().0, (a.inner().size().0 as f32 * 2.0).ceil() as u32);
@@ -264,8 +266,8 @@ fn the_taskbar_keeps_scaling_itself_and_the_dock_takes_the_backend_scale_only_in
 #[test]
 fn switching_from_a_taskbar_to_a_mac_dock_reconverts_the_cached_physical_output() {
     for edge in EDGES {
-        let (app, _log, dir) = parts("dpi-output-switch", edge, &APPS, vec![], false);
-        let _g = Guard(dir.clone());
+        let (app, _log, dir, theme) = parts("dpi-output-switch", edge, &APPS, vec![], false);
+        let _g = Guard(dir.clone(), theme);
         let mut a = Scaled::new(app, 2.0);
         std::fs::write(dir.join("settings.json"), r#"{"style":"windows"}"#).unwrap();
         a.tick();
